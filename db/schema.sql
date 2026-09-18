@@ -1,0 +1,30 @@
+-- Ejecutar esto en phpMyAdmin (HostGator) sobre la base de datos del proyecto.
+
+CREATE TABLE IF NOT EXISTS emails (
+  id CHAR(36) PRIMARY KEY,
+  destinatario VARCHAR(255) NOT NULL,
+  asunto VARCHAR(500) NOT NULL,
+  cuerpo LONGTEXT NOT NULL,
+  enviado_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  user_id VARCHAR(255) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS aperturas (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  email_id CHAR(36) NOT NULL,
+  abierto_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  ip VARCHAR(64),
+  user_agent VARCHAR(500),
+  FOREIGN KEY (email_id) REFERENCES emails(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS clics (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  email_id CHAR(36) NOT NULL,
+  url_destino VARCHAR(2048) NOT NULL,
+  click_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (email_id) REFERENCES emails(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE INDEX idx_aperturas_email_id ON aperturas(email_id);
+CREATE INDEX idx_clics_email_id ON clics(email_id);
