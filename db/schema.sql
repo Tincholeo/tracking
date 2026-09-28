@@ -28,3 +28,11 @@ CREATE TABLE IF NOT EXISTS clics (
 
 CREATE INDEX idx_aperturas_email_id ON aperturas(email_id);
 CREATE INDEX idx_clics_email_id ON clics(email_id);
+
+CREATE TABLE IF NOT EXISTS plantillas (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(255) NOT NULL,
+  asunto VARCHAR(500) NOT NULL,
+  cuerpo LONGTEXT NOT NULL,
+  creado_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
