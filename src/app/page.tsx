@@ -82,6 +82,24 @@ export default function Home() {
     setGuardandoPlantilla(false);
   }
 
+  async function borrarPlantilla() {
+    if (!plantillaSeleccionada) return;
+    const plantilla = plantillas.find((p) => String(p.id) === plantillaSeleccionada);
+    if (!plantilla) return;
+    if (!window.confirm(`¿Borrar la plantilla "${plantilla.nombre}"?`)) return;
+
+    const res = await fetch(`/api/templates/${plantillaSeleccionada}`, {
+      method: "DELETE",
+    });
+    if (res.ok) {
+      setMensaje("Plantilla borrada.");
+      setPlantillaSeleccionada("");
+      cargarPlantillas();
+    } else {
+      setMensaje("Error al borrar la plantilla.");
+    }
+  }
+
   async function enviarCorreo(e: React.FormEvent) {
     e.preventDefault();
     setEnviando(true);
@@ -123,18 +141,28 @@ export default function Home() {
 
         <form onSubmit={enviarCorreo} className="flex flex-col gap-3">
           {plantillas.length > 0 && (
-            <select
-              className="border rounded px-3 py-2 dark:bg-zinc-900"
-              value={plantillaSeleccionada}
-              onChange={(e) => usarPlantilla(e.target.value)}
-            >
-              <option value="">Usar una plantilla...</option>
-              {plantillas.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nombre}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <select
+                className="flex-1 border rounded px-3 py-2 dark:bg-zinc-900"
+                value={plantillaSeleccionada}
+                onChange={(e) => usarPlantilla(e.target.value)}
+              >
+                <option value="">Usar una plantilla...</option>
+                {plantillas.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={borrarPlantilla}
+                disabled={!plantillaSeleccionada}
+                className="rounded border px-3 py-2 text-red-600 disabled:opacity-50 dark:text-red-400"
+              >
+                Borrar
+              </button>
+            </div>
           )}
           <input
             className="border rounded px-3 py-2 dark:bg-zinc-900"
