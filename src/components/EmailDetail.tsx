@@ -13,6 +13,7 @@ type Detalle = {
     error_envio: string | null;
     enviado_at: string | null;
     con_baja: number;
+    programado_at: string | null;
     seguimiento_hecho: number;
     seg_condicion: "sin_apertura" | "sin_clic" | null;
     seg_dias: number | null;
@@ -40,6 +41,7 @@ const ESTADOS: Record<string, string> = {
   enviando: "Enviándose",
   error: "No se pudo enviar",
   omitido: "No se envió",
+  cancelado: "Cancelado",
   rebotado: "Rebotó: la dirección no recibe correos",
 };
 
@@ -52,8 +54,31 @@ function acortarUrl(url: string) {
   }
 }
 
-export default function EmailDetail({ id, onCerrar, onAbrir }: { id: string; onCerrar: () => void; onAbrir: (id: string) => void }) {
+export default function EmailDetail({
+  id,
+  onCerrar,
+  onAbrir,
+  onCambio,
+}: {
+  id: string;
+  onCerrar: () => void;
+  onAbrir: (id: string) => void;
+  onCambio?: () => void;
+}) {
   const [detalle, setDetalle] = useState<Detalle | null>(null);
+
+  async function cancelar() {
+    if (!window.confirm("¿Cancelar este envío?")) return;
+    await fetch("/api/emails/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [id] }),
+    });
+    fetch(`/api/emails/${id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setDetalle(d));
+    onCambio?.();
+  }
   const [verDescartadas, setVerDescartadas] = useState(false);
 
   useEffect(() => {
@@ -122,8 +147,15 @@ export default function EmailDetail({ id, onCerrar, onAbrir }: { id: string; onC
 
             {e.estado !== "enviado" && (
               <p className={`rounded-lg bg-surface-2 px-3 py-2 ${e.estado === "pendiente" ? "text-ink-2" : "text-danger"}`}>
-                {ESTADOS[e.estado] ?? e.estado}
+                {e.estado === "pendiente" && e.programado_at && new Date(e.programado_at) > new Date()
+                  ? `Programado para el ${formatFecha(e.programado_at)}`
+                  : (ESTADOS[e.estado] ?? e.estado)}
                 {e.error_envio && <span className="block text-xs text-ink-2">{e.error_envio}</span>}
+                {e.estado === "pendiente" && (
+                  <button onClick={cancelar} className="mt-1 block text-xs text-danger underline">
+                    Cancelar este envío
+                  </button>
+                )}
               </p>
             )}
             {e.estado_contacto && e.estado_contacto !== "activo" && (

@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS campanas (
   creado_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- estado: 'pendiente' (en cola) | 'enviando' | 'enviado' | 'error'
+-- estado: pendiente (en cola) | enviando | enviado | error | omitido | rebotado | cancelado
 CREATE TABLE IF NOT EXISTS emails (
   id CHAR(36) PRIMARY KEY,
   destinatario VARCHAR(255) NOT NULL,
@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS emails (
   resend_id VARCHAR(64) NULL,
   seguimiento_id INT NULL,
   seguimiento_hecho TINYINT(1) NOT NULL DEFAULT 0,
-  seguimiento_de CHAR(36) NULL
+  seguimiento_de CHAR(36) NULL,
+  programado_at DATETIME NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE INDEX idx_emails_estado ON emails(estado, creado_at);
@@ -83,4 +84,24 @@ CREATE TABLE IF NOT EXISTS seguimientos (
   asunto VARCHAR(500) NOT NULL DEFAULT '',
   cuerpo LONGTEXT NOT NULL,
   creado_at DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS etiquetas (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nombre VARCHAR(60) NOT NULL UNIQUE,
+  creado_at DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS contacto_etiquetas (
+  contacto_id INT NOT NULL,
+  etiqueta_id INT NOT NULL,
+  PRIMARY KEY (contacto_id, etiqueta_id),
+  FOREIGN KEY (contacto_id) REFERENCES contactos(id) ON DELETE CASCADE,
+  FOREIGN KEY (etiqueta_id) REFERENCES etiquetas(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Ajustes editables desde el panel (remitente, responder a).
+CREATE TABLE IF NOT EXISTS ajustes (
+  clave VARCHAR(64) PRIMARY KEY,
+  valor TEXT NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

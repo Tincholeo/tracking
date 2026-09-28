@@ -24,9 +24,9 @@ export async function GET(request: NextRequest) {
     ids.length ? [ids] : []
   );
 
-  const encabezado = ["email", "nombre", "empresa", "enviados", "abiertos", "clics", "ultimo_envio_utc", "creado_utc"];
+  const encabezado = ["email", "nombre", "empresa", "etiquetas", "estado", "enviados", "abiertos", "clics", "ultimo_envio_utc", "creado_utc"];
   const lineas = filas.map((f) =>
-    [f.email, f.nombre, f.empresa, f.enviados, f.abiertos, f.clicados, f.ultimo_envio ?? "", f.creado_at]
+    [f.email, f.nombre, f.empresa, (f.etiquetas ?? "").replace(/,/g, "; "), f.estado, f.enviados, f.abiertos, f.clicados, f.ultimo_envio ?? "", f.creado_at]
       .map(celda)
       .join(",")
   );

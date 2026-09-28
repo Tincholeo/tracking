@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import type { RowDataPacket } from "mysql2";
 import { getPool } from "@/lib/db";
 import { esEmailValido } from "@/lib/recipients";
-import { CONSULTA_CONTACTOS, guardarContactos, type ContactoEntrada } from "@/lib/contacts";
+import { CONSULTA_CONTACTOS, etiquetar, guardarContactos, type ContactoEntrada } from "@/lib/contacts";
 
 function idsDesde(request: NextRequest) {
   return (request.nextUrl.searchParams.get("ids") ?? "")
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const { contactos } = (await request.json()) as { contactos?: ContactoEntrada[] };
+  const { contactos, etiqueta } = (await request.json()) as { contactos?: ContactoEntrada[]; etiqueta?: string };
   if (!Array.isArray(contactos) || contactos.length === 0) {
     return NextResponse.json({ error: "No hay contactos para guardar" }, { status: 400 });
   }
@@ -51,6 +51,18 @@ export async function POST(request: NextRequest) {
   }
 
   await guardarContactos(validos);
+
+  if (etiqueta && validos.length > 0) {
+    const [filas] = await getPool().query<RowDataPacket[]>("SELECT id FROM contactos WHERE email IN (?)", [
+      validos.map((c) => c.email),
+    ]);
+    await etiquetar(
+      filas.map((f) => f.id),
+      etiqueta,
+      "agregar"
+    );
+  }
+
   return NextResponse.json({ guardados: validos.length, invalidos });
 }
 

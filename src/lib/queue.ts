@@ -4,6 +4,7 @@ import { Resend } from "resend";
 import { getPool } from "@/lib/db";
 import { injectTracking } from "@/lib/tracking";
 import { encabezadosBaja, pieBaja } from "@/lib/unsubscribe";
+import { leerAjustes, remitente } from "@/lib/settings";
 
 // Resend cuenta el cupo por día calendario UTC (se reinicia a las 00:00 UTC).
 // La reserva deja lugar para los avisos de apertura y el reporte semanal,
@@ -15,13 +16,16 @@ const MAX_POR_LOTE = 100; // máximo del endpoint batch de Resend
 export async function estadoCola() {
   const [[fila]] = await getPool().query<RowDataPacket[]>(`
     SELECT
-      (SELECT COUNT(*) FROM emails WHERE estado = 'pendiente') AS pendientes,
+      (SELECT COUNT(*) FROM emails WHERE estado = 'pendiente'
+         AND (programado_at IS NULL OR programado_at <= UTC_TIMESTAMP())) AS pendientes,
+      (SELECT COUNT(*) FROM emails WHERE estado = 'pendiente' AND programado_at > UTC_TIMESTAMP()) AS programados,
       (SELECT COUNT(*) FROM emails
          WHERE estado IN ('enviado', 'enviando') AND enviado_at >= UTC_DATE()) AS usados_hoy
   `);
   const usadosHoy = Number(fila.usados_hoy);
   return {
     pendientes: Number(fila.pendientes),
+    programados: Number(fila.programados),
     usadosHoy,
     limite: LIMITE_DIARIO,
     reserva: RESERVA,
@@ -50,6 +54,8 @@ export async function procesarCola() {
 
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL!;
   const resend = new Resend(process.env.RESEND_API_KEY);
+  const ajustes = await leerAjustes();
+  const from = remitente(ajustes);
   let enviados = 0;
   let fallidos = 0;
   let error: string | null = null;
@@ -64,7 +70,8 @@ export async function procesarCola() {
     const lote = randomUUID();
     const [reclamo] = await pool.query(
       `UPDATE emails SET estado = 'enviando', lote = ?, enviado_at = UTC_TIMESTAMP()
-       WHERE estado = 'pendiente' ORDER BY creado_at, id LIMIT ?`,
+       WHERE estado = 'pendiente' AND (programado_at IS NULL OR programado_at <= UTC_TIMESTAMP())
+       ORDER BY creado_at, id LIMIT ?`,
       [lote, cantidad]
     );
     if ((reclamo as { affectedRows: number }).affectedRows === 0) break;
@@ -76,7 +83,8 @@ export async function procesarCola() {
 
     const respuesta = await resend.batch.send(
       filas.map((f) => ({
-        from: process.env.RESEND_FROM_EMAIL!,
+        from,
+        ...(ajustes.responderA ? { replyTo: ajustes.responderA } : {}),
         to: f.destinatario,
         subject: f.asunto,
         // El pie va después del tracking para que su enlace no se reescriba.

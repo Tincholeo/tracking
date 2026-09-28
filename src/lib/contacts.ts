@@ -9,7 +9,10 @@ export const CONSULTA_CONTACTOS = `
     COUNT(e.id) AS enviados,
     COALESCE(SUM(EXISTS(SELECT 1 FROM aperturas a WHERE a.email_id = e.id AND a.sospechosa = 0)), 0) AS abiertos,
     COALESCE(SUM(EXISTS(SELECT 1 FROM clics k WHERE k.email_id = e.id)), 0) AS clicados,
-    MAX(e.enviado_at) AS ultimo_envio
+    MAX(e.enviado_at) AS ultimo_envio,
+    (SELECT GROUP_CONCAT(t.nombre ORDER BY t.nombre SEPARATOR ',')
+       FROM contacto_etiquetas ce JOIN etiquetas t ON t.id = ce.etiqueta_id
+      WHERE ce.contacto_id = c.id) AS etiquetas
   FROM contactos c
   LEFT JOIN emails e ON LOWER(e.destinatario) = c.email AND e.estado = 'enviado'
 `;
@@ -79,4 +82,34 @@ export async function marcarContacto(email: string, estado: EstadoContacto, moti
       [`No se envió: el contacto ${ETIQUETA_ESTADO[estado]}`, normalizado]
     );
   }
+}
+
+export function normalizarEtiqueta(nombre: string) {
+  return nombre.replace(/[,]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
+}
+
+// Agrega o quita una etiqueta a varios contactos. Al agregar, la crea si no existe.
+export async function etiquetar(contactoIds: number[], nombre: string, accion: "agregar" | "quitar") {
+  const pool = getPool();
+  const etiqueta = normalizarEtiqueta(nombre);
+  if (!etiqueta || contactoIds.length === 0) return 0;
+
+  if (accion === "agregar") {
+    await pool.query("INSERT IGNORE INTO etiquetas (nombre, creado_at) VALUES (?, UTC_TIMESTAMP())", [etiqueta]);
+  }
+  const [[fila]] = await pool.query<RowDataPacket[]>("SELECT id FROM etiquetas WHERE nombre = ?", [etiqueta]);
+  if (!fila) return 0;
+
+  const [r] =
+    accion === "agregar"
+      ? await pool.query(
+          `INSERT IGNORE INTO contacto_etiquetas (contacto_id, etiqueta_id)
+           SELECT id, ? FROM contactos WHERE id IN (?)`,
+          [fila.id, contactoIds]
+        )
+      : await pool.query("DELETE FROM contacto_etiquetas WHERE etiqueta_id = ? AND contacto_id IN (?)", [
+          fila.id,
+          contactoIds,
+        ]);
+  return (r as { affectedRows: number }).affectedRows;
 }

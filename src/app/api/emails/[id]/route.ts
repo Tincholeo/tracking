@@ -9,7 +9,7 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/emails/[id]
 
   const [[email]] = await pool.query<RowDataPacket[]>(
     `SELECT e.id, e.destinatario, e.asunto, e.cuerpo, e.estado, e.error_envio, e.enviado_at, e.creado_at,
-       e.con_baja, e.seguimiento_hecho, e.seguimiento_de, e.campana_id,
+       e.con_baja, e.seguimiento_hecho, e.programado_at, e.seguimiento_de, e.campana_id,
        s.condicion AS seg_condicion, s.dias AS seg_dias,
        c.nombre, c.empresa, c.estado AS estado_contacto
      FROM emails e

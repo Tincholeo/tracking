@@ -6,6 +6,19 @@ import EmailEditor from "@/components/EmailEditor";
 import ContactPicker, { type ContactoResumen } from "@/components/ContactPicker";
 import { parsearDestinatarios } from "@/lib/recipients";
 import { personalizar, usaVariables } from "@/lib/personalize";
+import { formatFecha } from "@/lib/formato";
+
+function esFechaFutura(fecha: Date) {
+  return !Number.isNaN(fecha.getTime()) && fecha.getTime() > Date.now();
+}
+
+function mananaALas9() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(9, 0, 0, 0);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T09:00`;
+}
 
 type Plantilla = { id: number; nombre: string; asunto: string; cuerpo: string };
 type Cola = { pendientes: number; disponibles: number; usadosHoy: number; limite: number; reserva: number };
@@ -44,6 +57,8 @@ export default function Enviar() {
     "<p>Hola {{primer_nombre|}},</p><p>Te escribo de nuevo por si no llegaste a ver mi correo anterior. Quedo atento a tu respuesta.</p>"
   );
   const [segKey, setSegKey] = useState(0);
+  const [programar, setProgramar] = useState(false);
+  const [fechaProgramada, setFechaProgramada] = useState(mananaALas9);
 
   function cargarCola() {
     fetch("/api/queue")
@@ -137,6 +152,12 @@ export default function Enviar() {
       return;
     }
 
+    const programadoPara = programar ? new Date(fechaProgramada) : null;
+    if (programadoPara && !esFechaFutura(programadoPara)) {
+      setAviso({ texto: "Elegí una fecha y hora futuras para programar el envío.", tipo: "error" });
+      return;
+    }
+
     setEnviando(true);
     setAviso(null);
     const res = await fetch("/api/send", {
@@ -147,6 +168,7 @@ export default function Enviar() {
         asunto,
         cuerpo,
         conBaja,
+        programadoPara: programadoPara?.toISOString() ?? null,
         seguimiento: seguimientoActivo
           ? { condicion: segCondicion, dias: segDias, asunto: segAsunto, cuerpo: segCuerpo }
           : null,
@@ -160,8 +182,10 @@ export default function Enviar() {
       return;
     }
 
-    const partes = [`${plural(data.enviadosAhora, "correo enviado", "correos enviados")} ahora`];
-    if (data.pendientes > 0) partes.push(`${data.pendientes} en cola: salen solos los próximos días`);
+    const partes = data.programadoPara
+      ? [`${plural(data.total, "correo programado", "correos programados")} para el ${formatFecha(data.programadoPara)}`]
+      : [`${plural(data.enviadosAhora, "correo enviado", "correos enviados")} ahora`];
+    if (!data.programadoPara && data.pendientes > 0) partes.push(`${data.pendientes} en cola: salen solos a medida que haya cupo`);
     if (data.fallidos > 0) partes.push(`${data.fallidos} con error (ver historial)`);
     if (data.omitidos?.length) partes.push(`${data.omitidos.length} omitidos por estar dados de baja o rebotar`);
     if (seguimientoActivo) partes.push(`recordatorio programado a ${segDias} día(s)`);
@@ -178,6 +202,7 @@ export default function Enviar() {
     setSeguimientoActivo(false);
     setSegAsunto("");
     setSegKey((k) => k + 1);
+    setProgramar(false);
     cargarCola();
   }
 
@@ -250,10 +275,10 @@ export default function Enviar() {
                 {validos.length > 1 && " · se envía como campaña, cada uno recibe su propio correo"}
               </span>
             )}
-            {saleHoy !== null && validos.length > saleHoy && (
+            {!programar && saleHoy !== null && validos.length > saleHoy && (
               <span className="text-ink-2">
-                Hoy salen {saleHoy}; los otros {validos.length - saleHoy} quedan en cola y se envían solos cada día a
-                las 9:05 (hora Argentina).
+                Hoy salen {saleHoy}; los otros {validos.length - saleHoy} quedan en cola y se envían solos cuando se renueve
+                el cupo diario.
               </span>
             )}
           </div>
@@ -288,6 +313,27 @@ export default function Enviar() {
         </div>
 
         <div className="flex flex-col gap-3 rounded-lg border border-line p-4">
+          <div className="flex flex-col gap-2">
+            <label className="flex items-start gap-2.5 text-sm text-ink">
+              <input type="checkbox" className="mt-0.5" checked={programar} onChange={(e) => setProgramar(e.target.checked)} />
+              <span>
+                Programar envío
+                <span className="block text-xs text-muted">
+                  Sale dentro de la hora elegida (la cola se revisa una vez por hora). Se puede cancelar desde el historial.
+                </span>
+              </span>
+            </label>
+            {programar && (
+              <input
+                type="datetime-local"
+                className="field ml-6 w-auto self-start"
+                value={fechaProgramada}
+                onChange={(e) => setFechaProgramada(e.target.value)}
+                aria-label="Fecha y hora de envío"
+              />
+            )}
+          </div>
+
           <label className="flex items-start gap-2.5 text-sm text-ink">
             <input type="checkbox" className="mt-0.5" checked={conBaja} onChange={(e) => setBajaManual(e.target.checked)} />
             <span>
@@ -302,7 +348,7 @@ export default function Enviar() {
             <input type="checkbox" className="mt-0.5" checked={seguimientoActivo} onChange={(e) => setSeguimientoActivo(e.target.checked)} />
             <span>
               Enviar un recordatorio automático
-              <span className="block text-xs text-muted">Solo a quien no cumpla la condición. Se revisa una vez por día (9:05, hora Argentina).</span>
+              <span className="block text-xs text-muted">Solo a quien no cumpla la condición. Se revisa cada hora.</span>
             </span>
           </label>
 
@@ -390,7 +436,9 @@ export default function Enviar() {
           >
             {enviando
               ? "Enviando…"
-              : validos.length > 1
+              : programar
+                ? `Programar envío${validos.length > 1 ? ` a ${validos.length}` : ""}`
+                : validos.length > 1
                 ? `Enviar a ${validos.length} destinatarios`
                 : "Enviar correo"}
           </button>

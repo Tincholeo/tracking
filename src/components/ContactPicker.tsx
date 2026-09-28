@@ -2,7 +2,14 @@
 
 import { useState } from "react";
 
-export type ContactoResumen = { id: number; email: string; nombre: string; empresa: string; estado: string };
+export type ContactoResumen = {
+  id: number;
+  email: string;
+  nombre: string;
+  empresa: string;
+  estado: string;
+  etiquetas?: string | null;
+};
 
 type Props = {
   contactos: ContactoResumen[];
@@ -14,12 +21,15 @@ type Props = {
 export default function ContactPicker({ contactos, yaIncluidos, onAgregar, onCerrar }: Props) {
   const [busqueda, setBusqueda] = useState("");
   const [seleccion, setSeleccion] = useState<Set<number>>(new Set());
+  const [etiqueta, setEtiqueta] = useState("");
+  const todasEtiquetas = [...new Set(contactos.flatMap((c) => (c.etiquetas ? c.etiquetas.split(",") : [])))].sort();
 
   const termino = busqueda.trim().toLowerCase();
   const visibles = contactos.filter(
     (c) =>
       c.estado === "activo" &&
       !yaIncluidos.has(c.email) &&
+      (!etiqueta || (c.etiquetas ?? "").split(",").includes(etiqueta)) &&
       (!termino || `${c.email} ${c.nombre} ${c.empresa}`.toLowerCase().includes(termino))
   );
   const todosMarcados = visibles.length > 0 && visibles.every((c) => seleccion.has(c.id));
@@ -65,10 +75,22 @@ export default function ContactPicker({ contactos, yaIncluidos, onAgregar, onCer
             onChange={(e) => setBusqueda(e.target.value)}
             autoFocus
           />
-          <label className="flex items-center gap-2 text-sm text-ink-2">
-            <input type="checkbox" checked={todosMarcados} onChange={alternarTodos} />
-            Seleccionar {termino ? "resultados" : "todos"} ({visibles.length})
-          </label>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="flex items-center gap-2 text-sm text-ink-2">
+              <input type="checkbox" checked={todosMarcados} onChange={alternarTodos} />
+              Seleccionar {termino || etiqueta ? "resultados" : "todos"} ({visibles.length})
+            </label>
+            {todasEtiquetas.length > 0 && (
+              <select className="field w-auto py-1 text-sm" value={etiqueta} onChange={(e) => setEtiqueta(e.target.value)} aria-label="Filtrar por etiqueta">
+                <option value="">Todas las etiquetas</option>
+                {todasEtiquetas.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
         </div>
 
         <ul className="flex-1 overflow-y-auto">

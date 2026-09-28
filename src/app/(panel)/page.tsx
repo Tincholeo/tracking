@@ -53,7 +53,7 @@ function Tarjeta({ titulo, valor, detalle }: { titulo: string; valor: string; de
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState(false);
-  const [cola, setCola] = useState<{ pendientes: number; disponibles: number } | null>(null);
+  const [cola, setCola] = useState<{ pendientes: number; disponibles: number; programados: number } | null>(null);
   const [procesando, setProcesando] = useState(false);
   const [enviandoReporte, setEnviandoReporte] = useState(false);
 
@@ -63,7 +63,7 @@ export default function Dashboard() {
     const data = await res.json().catch(() => null);
     setProcesando(false);
     if (!data) return;
-    setCola({ pendientes: data.pendientes, disponibles: data.disponibles });
+    setCola({ pendientes: data.pendientes, disponibles: data.disponibles, programados: data.programados });
     setAvisoReporte(
       data.error
         ? { texto: `Resend respondió: ${data.error}. Los correos siguen en cola.`, ok: false }
@@ -121,20 +121,23 @@ export default function Dashboard() {
         <p className={`-mt-4 text-sm ${avisoReporte.ok ? "text-success" : "text-danger"}`}>{avisoReporte.texto}</p>
       )}
 
-      {cola && cola.pendientes > 0 && (
+      {cola && (cola.pendientes > 0 || cola.programados > 0) && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface px-5 py-4">
           <div className="text-sm">
-            <span className="font-medium text-ink">{cola.pendientes} correo(s) en cola.</span>{" "}
+            <span className="font-medium text-ink">
+              {cola.pendientes > 0 && `${cola.pendientes} correo(s) en cola. `}
+              {cola.programados > 0 && `${cola.programados} programado(s). `}
+            </span>
             <span className="text-ink-2">
-              Salen solos cada día a las 9:05 (hora Argentina) según el cupo diario. Hoy quedan {cola.disponibles} disponibles.
+              La cola se revisa cada hora y envía según el cupo diario. Hoy quedan {cola.disponibles} disponibles.
             </span>
           </div>
           <button
             onClick={enviarPendientes}
-            disabled={procesando || cola.disponibles === 0}
+            disabled={procesando || cola.disponibles === 0 || cola.pendientes === 0}
             className="rounded-lg border border-line px-4 py-2 text-sm text-ink hover:bg-surface-2 disabled:opacity-50"
           >
-            {procesando ? "Enviando…" : cola.disponibles === 0 ? "Sin cupo hoy" : "Enviar ahora"}
+            {procesando ? "Enviando…" : cola.pendientes === 0 ? "Nada para enviar ahora" : cola.disponibles === 0 ? "Sin cupo hoy" : "Enviar ahora"}
           </button>
         </div>
       )}

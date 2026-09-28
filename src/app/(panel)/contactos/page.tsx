@@ -16,7 +16,10 @@ type Contacto = {
   ultimo_envio: string | null;
   estado: "activo" | "baja" | "rebotado" | "queja";
   estado_motivo: string | null;
+  etiquetas: string | null;
 };
+
+type Etiqueta = { id: number; nombre: string; total: number };
 
 const ESTADO_TEXTO = { baja: "Baja", rebotado: "Rebota", queja: "Spam" } as const;
 
@@ -38,6 +41,8 @@ export default function Contactos() {
   const [contactos, setContactos] = useState<Contacto[] | null>(null);
   const [busqueda, setBusqueda] = useState("");
   const [filtro, setFiltro] = useState<"todos" | "activos" | "inactivos">("todos");
+  const [etiquetas, setEtiquetas] = useState<Etiqueta[]>([]);
+  const [filtroEtiqueta, setFiltroEtiqueta] = useState("");
   const [seleccion, setSeleccion] = useState<Set<number>>(new Set());
   const [aviso, setAviso] = useState<Aviso | null>(null);
 
@@ -46,7 +51,14 @@ export default function Contactos() {
   const [editando, setEditando] = useState<{ id: number; nombre: string; empresa: string } | null>(null);
   const archivo = useRef<HTMLInputElement>(null);
 
+  function cargarEtiquetas() {
+    return fetch("/api/tags")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => data && setEtiquetas(data.etiquetas));
+  }
+
   function cargar() {
+    cargarEtiquetas();
     return fetch("/api/contacts")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => data && setContactos(data.contactos));
@@ -56,6 +68,9 @@ export default function Contactos() {
     fetch("/api/contacts")
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => data && setContactos(data.contactos));
+    fetch("/api/tags")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => data && setEtiquetas(data.etiquetas));
   }, []);
 
   if (!contactos) return <p className="text-muted">Cargando…</p>;
@@ -64,6 +79,7 @@ export default function Contactos() {
   const visibles = contactos.filter(
     (c) =>
       (filtro === "todos" || (filtro === "activos") === (c.estado === "activo")) &&
+      (!filtroEtiqueta || (c.etiquetas ?? "").split(",").includes(filtroEtiqueta)) &&
       (!termino || `${c.email} ${c.nombre} ${c.empresa}`.toLowerCase().includes(termino))
   );
   const inactivos = contactos.filter((c) => c.estado !== "activo").length;
@@ -90,11 +106,11 @@ export default function Contactos() {
     });
   }
 
-  async function guardarContactos(lista: { email: string; nombre: string; empresa: string }[]) {
+  async function guardarContactos(lista: { email: string; nombre: string; empresa: string }[], etiqueta?: string) {
     const res = await fetch("/api/contacts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contactos: lista }),
+      body: JSON.stringify({ contactos: lista, etiqueta }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
@@ -130,7 +146,15 @@ export default function Contactos() {
       return;
     }
     if (!window.confirm(`Importar ${filas.length} contacto(s) de "${file.name}"? Los que ya existen se actualizan.`)) return;
-    await guardarContactos(filas);
+    const etiqueta = window.prompt(
+      `Etiqueta para estos contactos (opcional, por ejemplo el nombre del proyecto).${
+        etiquetas.length ? `
+Existentes: ${etiquetas.map((t) => t.nombre).join(", ")}` : ""
+      }`,
+      ""
+    );
+    if (etiqueta === null) return;
+    await guardarContactos(filas, etiqueta.trim() || undefined);
   }
 
   async function eliminar() {
@@ -176,6 +200,43 @@ export default function Contactos() {
     } else {
       setAviso({ texto: `Error: ${data.error ?? res.statusText}`, ok: false });
     }
+  }
+
+  async function cambiarEtiqueta(accion: "agregar" | "quitar") {
+    const existentes = etiquetas.map((t) => t.nombre).join(", ");
+    const nombre = window.prompt(
+      accion === "agregar"
+        ? `Etiqueta para agregar a ${idsSeleccion.length} contacto(s). Si no existe, se crea.${existentes ? `
+Existentes: ${existentes}` : ""}`
+        : `Etiqueta para quitar de ${idsSeleccion.length} contacto(s).${existentes ? `
+Existentes: ${existentes}` : ""}`,
+      filtroEtiqueta
+    );
+    if (!nombre?.trim()) return;
+    const res = await fetch("/api/contacts/tags", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: idsSeleccion, etiqueta: nombre, accion }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setAviso({
+        texto: accion === "agregar" ? `Etiqueta «${data.etiqueta}» agregada.` : `Etiqueta «${data.etiqueta}» quitada.`,
+        ok: true,
+      });
+      await cargar();
+    } else {
+      setAviso({ texto: `Error: ${data.error ?? res.statusText}`, ok: false });
+    }
+  }
+
+  async function borrarEtiqueta() {
+    const etiqueta = etiquetas.find((t) => t.nombre === filtroEtiqueta);
+    if (!etiqueta) return;
+    if (!window.confirm(`¿Eliminar la etiqueta «${etiqueta.nombre}»? Se quita de ${etiqueta.total} contacto(s); los contactos no se borran.`)) return;
+    await fetch(`/api/tags/${etiqueta.id}`, { method: "DELETE" });
+    setFiltroEtiqueta("");
+    await cargar();
   }
 
   async function guardarEdicion() {
@@ -257,6 +318,21 @@ export default function Contactos() {
           <option value="activos">Activos</option>
           <option value="inactivos">Baja, rebote o spam ({inactivos})</option>
         </select>
+        {etiquetas.length > 0 && (
+          <select className="field w-auto" value={filtroEtiqueta} onChange={(e) => setFiltroEtiqueta(e.target.value)} aria-label="Filtrar por etiqueta">
+            <option value="">Todas las etiquetas</option>
+            {etiquetas.map((t) => (
+              <option key={t.id} value={t.nombre}>
+                {t.nombre} ({t.total})
+              </option>
+            ))}
+          </select>
+        )}
+        {filtroEtiqueta && (
+          <button onClick={borrarEtiqueta} className="text-xs text-muted underline hover:text-danger">
+            Eliminar etiqueta
+          </button>
+        )}
         {seleccion.size > 0 && (
           <div className="flex flex-wrap items-center gap-2 rounded-lg bg-surface-2 px-3 py-1.5 text-sm">
             <span className="text-ink">{seleccion.size} seleccionado(s)</span>
@@ -271,6 +347,12 @@ export default function Contactos() {
               className="rounded-md px-2 py-1 text-ink hover:bg-surface"
             >
               Exportar
+            </button>
+            <button onClick={() => cambiarEtiqueta("agregar")} className="rounded-md px-2 py-1 text-ink hover:bg-surface">
+              Etiquetar
+            </button>
+            <button onClick={() => cambiarEtiqueta("quitar")} className="rounded-md px-2 py-1 text-ink hover:bg-surface">
+              Quitar etiqueta
             </button>
             <button onClick={() => cambiarEstado("baja")} className="rounded-md px-2 py-1 text-ink hover:bg-surface">
               Dar de baja
@@ -333,6 +415,16 @@ export default function Contactos() {
                     )}
                     <div className={c.nombre || enEdicion ? "text-muted" : "text-ink"}>
                       {c.email}
+                      {c.etiquetas?.split(",").map((t) => (
+                        <button
+                          key={t}
+                          onClick={() => setFiltroEtiqueta(t)}
+                          title="Filtrar por esta etiqueta"
+                          className="ml-1.5 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-ink-2 hover:text-ink"
+                        >
+                          {t}
+                        </button>
+                      ))}
                       {c.estado !== "activo" && (
                         <span title={c.estado_motivo ?? undefined} className="ml-2 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-danger">
                           {ESTADO_TEXTO[c.estado]}

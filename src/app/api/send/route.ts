@@ -11,7 +11,22 @@ import { validarSeguimiento, type SeguimientoEntrada } from "@/lib/followups";
 const MAX_DESTINATARIOS = 2000;
 
 export async function POST(request: NextRequest) {
-  const { destinatarios, asunto, cuerpo, userId, conBaja, seguimiento } = await request.json();
+  const { destinatarios, asunto, cuerpo, userId, conBaja, seguimiento, programadoPara } = await request.json();
+
+  let programado: Date | null = null;
+  if (programadoPara) {
+    programado = new Date(programadoPara);
+    const ahora = Date.now();
+    if (Number.isNaN(programado.getTime())) {
+      return NextResponse.json({ error: "Fecha de programación inválida" }, { status: 400 });
+    }
+    if (programado.getTime() < ahora - 60_000) {
+      return NextResponse.json({ error: "La fecha programada ya pasó" }, { status: 400 });
+    }
+    if (programado.getTime() > ahora + 366 * 86_400_000) {
+      return NextResponse.json({ error: "Se puede programar hasta un año adelante" }, { status: 400 });
+    }
+  }
 
   let seguimientoValido: SeguimientoEntrada | null = null;
   if (seguimiento) {
@@ -88,19 +103,21 @@ export async function POST(request: NextRequest) {
       campanaId,
       conBaja ? 1 : 0,
       seguimientoId,
+      programado,
     ];
   });
 
   for (let i = 0; i < filas.length; i += 200) {
     const lote = filas.slice(i, i + 200);
     await pool.query(
-      `INSERT INTO emails (id, destinatario, asunto, cuerpo, user_id, campana_id, con_baja, seguimiento_id, estado, creado_at)
-       VALUES ${lote.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', UTC_TIMESTAMP())").join(", ")}`,
+      `INSERT INTO emails (id, destinatario, asunto, cuerpo, user_id, campana_id, con_baja, seguimiento_id, programado_at, estado, creado_at)
+       VALUES ${lote.map(() => "(?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', UTC_TIMESTAMP())").join(", ")}`,
       lote.flat()
     );
   }
 
-  const envio = await procesarCola();
+  // Un envío programado solo queda en cola; lo despacha el cron cuando llegue la hora.
+  const envio = programado ? { error: null, disponibles: null } : await procesarCola();
 
   const [[resumen]] = await pool.query<RowDataPacket[]>(
     `SELECT SUM(estado = 'pendiente') AS pendientes, SUM(estado = 'enviado') AS enviados,
@@ -113,6 +130,7 @@ export async function POST(request: NextRequest) {
     campanaId,
     total: filas.length,
     omitidos: omitidos.map((d) => d.email),
+    programadoPara: programado?.toISOString() ?? null,
     pendientes: Number(resumen.pendientes ?? 0),
     enviadosAhora: Number(resumen.enviados ?? 0),
     fallidos: Number(resumen.fallidos ?? 0),

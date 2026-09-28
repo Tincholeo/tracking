@@ -11,9 +11,10 @@ type EmailRow = {
   enviado_at: string | null;
   creado_at: string | null;
   campana_id: string | null;
-  estado: "pendiente" | "enviando" | "enviado" | "error" | "omitido" | "rebotado";
+  estado: "pendiente" | "enviando" | "enviado" | "error" | "omitido" | "rebotado" | "cancelado";
   error_envio: string | null;
   seguimiento_de: string | null;
+  programado_at: string | null;
 };
 
 type Aggregate = { email_id: string; total: number };
@@ -41,6 +42,9 @@ function CeldaEnvio({ email }: { email: EmailRow }) {
   if (email.estado === "enviado" && email.enviado_at) return <>{formatFecha(email.enviado_at)}</>;
   if (email.estado === "error") return <Insignia peligro titulo={email.error_envio ?? undefined}>Error al enviar</Insignia>;
   if (email.estado === "rebotado") return <Insignia peligro titulo={email.error_envio ?? undefined}>Rebotó</Insignia>;
+  if (email.estado === "cancelado") return <Insignia>Cancelado</Insignia>;
+  if (email.estado === "pendiente" && email.programado_at && new Date(email.programado_at) > new Date())
+    return <Insignia titulo="Envío programado">Programado · {formatFecha(email.programado_at)}</Insignia>;
   if (email.estado === "omitido") return <Insignia titulo={email.error_envio ?? undefined}>No enviado (baja)</Insignia>;
   return <Insignia titulo="Sale automáticamente cuando haya cupo diario">En cola</Insignia>;
 }
@@ -53,6 +57,16 @@ export default function Historial() {
   const [busqueda, setBusqueda] = useState("");
   const [detalle, setDetalle] = useState<string | null>(null);
 
+  function cargar() {
+    fetch("/api/emails")
+      .then((r) => r.json())
+      .then((data) => {
+        setEmails(data.emails);
+        setAperturas(data.aperturas);
+        setClics(data.clics);
+      });
+  }
+
   useEffect(() => {
     fetch("/api/emails")
       .then((r) => r.json())
@@ -62,6 +76,16 @@ export default function Historial() {
         setClics(data.clics);
       });
   }, []);
+
+  async function cancelarCampana(campanaId: string, cantidad: number) {
+    if (!window.confirm(`¿Cancelar los ${cantidad} correo(s) de esta campaña que todavía no salieron?`)) return;
+    await fetch("/api/emails/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ campanaId }),
+    });
+    cargar();
+  }
 
   const aperturasDe = (id: string) => Number(aperturas.find((a) => a.email_id === id)?.total ?? 0);
   const clicsDe = (id: string) => Number(clics.find((c) => c.email_id === id)?.total ?? 0);
@@ -169,7 +193,22 @@ export default function Historial() {
                     <td className={`${celda} text-ink-2`}>
                       <div className="flex flex-wrap items-center gap-1.5">
                         {fechaCampana && formatFecha(fechaCampana)}
-                        {enCola > 0 && <Insignia titulo="Salen automáticamente cuando haya cupo diario">{enCola} en cola</Insignia>}
+                        {enCola > 0 && (
+                          <Insignia titulo="Salen automáticamente cuando haya cupo diario o llegue la hora programada">
+                            {enCola} {miembros.some((e) => e.programado_at && new Date(e.programado_at) > new Date()) ? "programados" : "en cola"}
+                          </Insignia>
+                        )}
+                        {enCola > 0 && (
+                          <button
+                            onClick={(ev) => {
+                              ev.stopPropagation();
+                              cancelarCampana(campanaId, enCola);
+                            }}
+                            className="rounded-md px-1.5 py-0.5 text-xs text-danger hover:bg-surface"
+                          >
+                            Cancelar
+                          </button>
+                        )}
                         {conError > 0 && <Insignia peligro>{conError} con error o rebote</Insignia>}
                         {omitidos > 0 && <Insignia titulo="Contactos dados de baja o que rebotan">{omitidos} omitidos</Insignia>}
                       </div>
@@ -200,7 +239,7 @@ export default function Historial() {
       <p className="text-xs text-muted">
         Hacé clic en un correo para ver su actividad completa. En las campañas, la fila resumen muestra cuántos abrieron o hicieron clic; hacé clic en ella para ver cada destinatario.
       </p>
-      {detalle && <EmailDetail key={detalle} id={detalle} onCerrar={() => setDetalle(null)} onAbrir={setDetalle} />}
+      {detalle && <EmailDetail key={detalle} id={detalle} onCerrar={() => setDetalle(null)} onAbrir={setDetalle} onCambio={cargar} />}
     </div>
   );
 }
