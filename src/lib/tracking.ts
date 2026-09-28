@@ -3,6 +3,10 @@
 
 const LINK_REGEX = /href="(https?:\/\/[^"]+)"/g;
 
+export function extractLinks(html: string): string[] {
+  return [...html.matchAll(LINK_REGEX)].map((match) => match[1]);
+}
+
 export function injectTracking(html: string, emailId: string, baseUrl: string) {
   const withTrackedLinks = html.replace(LINK_REGEX, (_match, url: string) => {
     const trackedUrl = `${baseUrl}/track/click/${emailId}?url=${encodeURIComponent(url)}`;

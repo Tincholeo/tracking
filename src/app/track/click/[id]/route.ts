@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { RowDataPacket } from "mysql2";
 import { getPool } from "@/lib/db";
+import { extractLinks } from "@/lib/tracking";
 
 export async function GET(
   request: NextRequest,
@@ -12,8 +14,19 @@ export async function GET(
     return NextResponse.json({ error: "Falta el parámetro url" }, { status: 400 });
   }
 
+  const pool = getPool();
+
+  const [rows] = await pool.query<(RowDataPacket & { cuerpo: string })[]>(
+    "SELECT cuerpo FROM emails WHERE id = ? LIMIT 1",
+    [id]
+  );
+  const email = rows[0];
+
+  if (!email || !extractLinks(email.cuerpo).includes(destino)) {
+    return NextResponse.json({ error: "Link no reconocido" }, { status: 400 });
+  }
+
   try {
-    const pool = getPool();
     await pool.query(
       "INSERT INTO clics (email_id, url_destino) VALUES (?, ?)",
       [id, destino]
