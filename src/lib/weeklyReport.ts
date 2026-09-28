@@ -7,7 +7,7 @@ const ZONA = "America/Argentina/Buenos_Aires";
 
 const ABIERTO = "EXISTS(SELECT 1 FROM aperturas a WHERE a.email_id = e.id AND a.sospechosa = 0)";
 const CLICADO = "EXISTS(SELECT 1 FROM clics c WHERE c.email_id = e.id)";
-const SEMANA = "e.enviado_at >= UTC_TIMESTAMP() - INTERVAL 7 DAY";
+const SEMANA = "e.estado = 'enviado' AND e.enviado_at >= UTC_TIMESTAMP() - INTERVAL 7 DAY";
 
 type Totales = { enviados: number; abiertos: number; clicados: number };
 
@@ -17,7 +17,8 @@ async function totales(desdeDias: number, hastaDias: number): Promise<Totales> {
        COALESCE(SUM(${ABIERTO}), 0) AS abiertos,
        COALESCE(SUM(${CLICADO}), 0) AS clicados
      FROM emails e
-     WHERE e.enviado_at >= UTC_TIMESTAMP() - INTERVAL ? DAY
+     WHERE e.estado = 'enviado'
+       AND e.enviado_at >= UTC_TIMESTAMP() - INTERVAL ? DAY
        AND e.enviado_at < UTC_TIMESTAMP() - INTERVAL ? DAY`,
     [desdeDias, hastaDias]
   );
@@ -76,7 +77,7 @@ export async function construirReporteSemanal() {
     `SELECT c.asunto, COUNT(e.id) AS total,
        COALESCE(SUM(${ABIERTO}), 0) AS abiertos,
        COALESCE(SUM(${CLICADO}), 0) AS clicados
-     FROM campanas c JOIN emails e ON e.campana_id = c.id
+     FROM campanas c JOIN emails e ON e.campana_id = c.id AND e.estado = 'enviado'
      WHERE c.creado_at >= UTC_TIMESTAMP() - INTERVAL 7 DAY
      GROUP BY c.id, c.asunto, c.creado_at
      ORDER BY c.creado_at DESC`

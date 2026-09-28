@@ -7,7 +7,7 @@ export async function GET() {
 
   const [[totales]] = await pool.query<RowDataPacket[]>(`
     SELECT
-      (SELECT COUNT(*) FROM emails) AS enviados,
+      (SELECT COUNT(*) FROM emails WHERE estado = 'enviado') AS enviados,
       (SELECT COUNT(DISTINCT email_id) FROM aperturas WHERE sospechosa = 0) AS abiertos,
       (SELECT COUNT(DISTINCT email_id) FROM clics) AS clicados,
       (SELECT COUNT(*) FROM campanas) AS campanas
@@ -18,7 +18,7 @@ export async function GET() {
     SELECT e.enviado_at,
       EXISTS(SELECT 1 FROM aperturas a WHERE a.email_id = e.id AND a.sospechosa = 0) AS abierto
     FROM emails e
-    WHERE e.enviado_at >= UTC_TIMESTAMP() - INTERVAL 15 DAY
+    WHERE e.estado = 'enviado' AND e.enviado_at >= UTC_TIMESTAMP() - INTERVAL 15 DAY
   `);
 
   const [recientes] = await pool.query<RowDataPacket[]>(`

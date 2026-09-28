@@ -53,7 +53,23 @@ function Tarjeta({ titulo, valor, detalle }: { titulo: string; valor: string; de
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState(false);
+  const [cola, setCola] = useState<{ pendientes: number; disponibles: number } | null>(null);
+  const [procesando, setProcesando] = useState(false);
   const [enviandoReporte, setEnviandoReporte] = useState(false);
+
+  async function enviarPendientes() {
+    setProcesando(true);
+    const res = await fetch("/api/queue", { method: "POST" });
+    const data = await res.json().catch(() => null);
+    setProcesando(false);
+    if (!data) return;
+    setCola({ pendientes: data.pendientes, disponibles: data.disponibles });
+    setAvisoReporte(
+      data.error
+        ? { texto: `Resend respondió: ${data.error}. Los correos siguen en cola.`, ok: false }
+        : { texto: `${data.enviados} correo(s) enviados desde la cola.`, ok: true }
+    );
+  }
   const [avisoReporte, setAvisoReporte] = useState<{ texto: string; ok: boolean } | null>(null);
 
   async function enviarReporte() {
@@ -74,6 +90,9 @@ export default function Dashboard() {
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then(setStats)
       .catch(() => setError(true));
+    fetch("/api/queue")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => data && setCola(data));
   }, []);
 
   if (error) return <p className="text-danger">No se pudieron cargar las estadísticas.</p>;
@@ -100,6 +119,24 @@ export default function Dashboard() {
       </div>
       {avisoReporte && (
         <p className={`-mt-4 text-sm ${avisoReporte.ok ? "text-success" : "text-danger"}`}>{avisoReporte.texto}</p>
+      )}
+
+      {cola && cola.pendientes > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface px-5 py-4">
+          <div className="text-sm">
+            <span className="font-medium text-ink">{cola.pendientes} correo(s) en cola.</span>{" "}
+            <span className="text-ink-2">
+              Salen solos cada día a las 9:05 (hora Argentina) según el cupo diario. Hoy quedan {cola.disponibles} disponibles.
+            </span>
+          </div>
+          <button
+            onClick={enviarPendientes}
+            disabled={procesando || cola.disponibles === 0}
+            className="rounded-lg border border-line px-4 py-2 text-sm text-ink hover:bg-surface-2 disabled:opacity-50"
+          >
+            {procesando ? "Enviando…" : cola.disponibles === 0 ? "Sin cupo hoy" : "Enviar ahora"}
+          </button>
+        </div>
       )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import EmailEditor from "@/components/EmailEditor";
 
 type Plantilla = { id: number; nombre: string; asunto: string; cuerpo: string };
 
@@ -13,6 +14,7 @@ export default function Plantillas() {
   const [nombre, setNombre] = useState("");
   const [asunto, setAsunto] = useState("");
   const [cuerpo, setCuerpo] = useState("");
+  const [editorKey, setEditorKey] = useState(0);
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
 
@@ -30,6 +32,10 @@ export default function Plantillas() {
 
   async function crear(e: React.FormEvent) {
     e.preventDefault();
+    if (!cuerpo.trim()) {
+      setMensaje("El mensaje está vacío.");
+      return;
+    }
     setGuardando(true);
     const res = await fetch("/api/templates", {
       method: "POST",
@@ -40,6 +46,7 @@ export default function Plantillas() {
       setNombre("");
       setAsunto("");
       setCuerpo("");
+      setEditorKey((k) => k + 1);
       setMensaje(null);
       cargar();
     } else {
@@ -96,10 +103,10 @@ export default function Plantillas() {
           Asunto
           <input className="field" value={asunto} onChange={(e) => setAsunto(e.target.value)} required />
         </label>
-        <label className="flex flex-col gap-1.5 text-sm text-ink-2">
-          Cuerpo (se permite HTML)
-          <textarea className="field min-h-32 font-mono text-sm" value={cuerpo} onChange={(e) => setCuerpo(e.target.value)} required />
-        </label>
+        <div className="flex flex-col gap-1.5 text-sm text-ink-2">
+          Mensaje
+          <EmailEditor key={editorKey} value={cuerpo} onChange={setCuerpo} minHeight={160} />
+        </div>
         <button
           type="submit"
           disabled={guardando}

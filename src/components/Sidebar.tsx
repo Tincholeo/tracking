@@ -8,6 +8,7 @@ const ICONOS = {
   dashboard: "M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z",
   enviar: "M2 21l21-9L2 3v7l15 2-15 2v7z",
   historial: "M13 3a9 9 0 0 0-9 9H1l3.9 3.9L9 12H6a7 7 0 1 1 2.05 4.95l-1.42 1.42A9 9 0 1 0 13 3zm-1 5v5l4.25 2.52.77-1.28-3.52-2.09V8H12z",
+  contactos: "M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z",
   plantillas: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z",
 };
 
@@ -15,6 +16,7 @@ const ITEMS = [
   { href: "/", label: "Dashboard", icono: ICONOS.dashboard },
   { href: "/enviar", label: "Enviar", icono: ICONOS.enviar },
   { href: "/historial", label: "Historial", icono: ICONOS.historial },
+  { href: "/contactos", label: "Contactos", icono: ICONOS.contactos },
   { href: "/plantillas", label: "Plantillas", icono: ICONOS.plantillas },
 ];
 

@@ -7,8 +7,11 @@ type EmailRow = {
   id: string;
   destinatario: string;
   asunto: string;
-  enviado_at: string;
+  enviado_at: string | null;
+  creado_at: string | null;
   campana_id: string | null;
+  estado: "pendiente" | "enviando" | "enviado" | "error";
+  error_envio: string | null;
 };
 
 type Aggregate = { email_id: string; total: number };
@@ -19,6 +22,23 @@ type Fila =
 
 function Contador({ valor }: { valor: number }) {
   return <span className={valor > 0 ? "font-medium text-ink" : "text-muted"}>{valor}</span>;
+}
+
+function Insignia({ children, titulo, peligro }: { children: React.ReactNode; titulo?: string; peligro?: boolean }) {
+  return (
+    <span
+      title={titulo}
+      className={`rounded-full px-2 py-0.5 text-xs ${peligro ? "bg-surface-2 text-danger" : "bg-surface-2 text-ink-2"}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function CeldaEnvio({ email }: { email: EmailRow }) {
+  if (email.estado === "enviado" && email.enviado_at) return <>{formatFecha(email.enviado_at)}</>;
+  if (email.estado === "error") return <Insignia peligro titulo={email.error_envio ?? undefined}>Error al enviar</Insignia>;
+  return <Insignia titulo="Sale automáticamente cuando haya cupo diario">En cola</Insignia>;
 }
 
 export default function Historial() {
@@ -113,7 +133,7 @@ export default function Historial() {
                   <tr key={e.id} className="border-b border-line last:border-0">
                     <td className={celda}>{e.destinatario}</td>
                     <td className={`${celda} text-ink-2`}>{e.asunto}</td>
-                    <td className={`${celda} text-ink-2`}>{formatFecha(e.enviado_at)}</td>
+                    <td className={`${celda} text-ink-2`}><CeldaEnvio email={e} /></td>
                     <td className={`${celda} text-right`}><Contador valor={aperturasDe(e.id)} /></td>
                     <td className={`${celda} text-right`}><Contador valor={clicsDe(e.id)} /></td>
                   </tr>
@@ -123,6 +143,10 @@ export default function Historial() {
               const { campanaId, emails: miembros } = fila;
               const abiertos = miembros.filter((e) => aperturasDe(e.id) > 0).length;
               const conClic = miembros.filter((e) => clicsDe(e.id) > 0).length;
+              const enviados = miembros.filter((e) => e.estado === "enviado");
+              const enCola = miembros.filter((e) => e.estado === "pendiente" || e.estado === "enviando").length;
+              const conError = miembros.filter((e) => e.estado === "error").length;
+              const fechaCampana = enviados[enviados.length - 1]?.enviado_at ?? miembros[0].creado_at;
               const expandida = abiertas.has(campanaId);
 
               return (
@@ -133,12 +157,18 @@ export default function Historial() {
                       Campaña · {miembros.length} destinatarios
                     </td>
                     <td className={`${celda} text-ink-2`}>{miembros[0].asunto}</td>
-                    <td className={`${celda} text-ink-2`}>{formatFecha(miembros[0].enviado_at)}</td>
-                    <td className={`${celda} text-right`}>
-                      <Contador valor={abiertos} /> <span className="text-muted">/ {miembros.length}</span>
+                    <td className={`${celda} text-ink-2`}>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {fechaCampana && formatFecha(fechaCampana)}
+                        {enCola > 0 && <Insignia titulo="Salen automáticamente cuando haya cupo diario">{enCola} en cola</Insignia>}
+                        {conError > 0 && <Insignia peligro>{conError} con error</Insignia>}
+                      </div>
                     </td>
                     <td className={`${celda} text-right`}>
-                      <Contador valor={conClic} /> <span className="text-muted">/ {miembros.length}</span>
+                      <Contador valor={abiertos} /> <span className="text-muted">/ {enviados.length}</span>
+                    </td>
+                    <td className={`${celda} text-right`}>
+                      <Contador valor={conClic} /> <span className="text-muted">/ {enviados.length}</span>
                     </td>
                   </tr>
                   {expandida &&
@@ -146,7 +176,7 @@ export default function Historial() {
                       <tr key={e.id} className="border-b border-line">
                         <td className={`${celda} pl-11 text-ink-2`}>{e.destinatario}</td>
                         <td className={`${celda} text-muted`}>{e.asunto}</td>
-                        <td className={`${celda} text-muted`}>{formatFecha(e.enviado_at)}</td>
+                        <td className={`${celda} text-muted`}><CeldaEnvio email={e} /></td>
                         <td className={`${celda} text-right`}><Contador valor={aperturasDe(e.id)} /></td>
                         <td className={`${celda} text-right`}><Contador valor={clicsDe(e.id)} /></td>
                       </tr>
