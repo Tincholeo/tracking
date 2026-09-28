@@ -29,5 +29,6 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!track/|_next/static|_next/image|favicon.ico).*)"],
+  // /api/cron/* se autentica con CRON_SECRET en el propio handler.
+  matcher: ["/((?!track/|api/cron/|_next/static|_next/image|favicon.ico).*)"],
 };

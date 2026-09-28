@@ -53,6 +53,21 @@ function Tarjeta({ titulo, valor, detalle }: { titulo: string; valor: string; de
 export default function Dashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState(false);
+  const [enviandoReporte, setEnviandoReporte] = useState(false);
+  const [avisoReporte, setAvisoReporte] = useState<{ texto: string; ok: boolean } | null>(null);
+
+  async function enviarReporte() {
+    setEnviandoReporte(true);
+    setAvisoReporte(null);
+    const res = await fetch("/api/reports/weekly", { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    setAvisoReporte(
+      res.ok
+        ? { texto: `Reporte enviado a ${data.destino}.`, ok: true }
+        : { texto: `No se pudo enviar el reporte: ${data.error ?? res.statusText}`, ok: false }
+    );
+    setEnviandoReporte(false);
+  }
 
   useEffect(() => {
     fetch("/api/stats")
@@ -70,10 +85,22 @@ export default function Dashboard() {
     <div className="flex flex-col gap-8">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <Link href="/enviar" className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-page">
-          Nuevo correo
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={enviarReporte}
+            disabled={enviandoReporte}
+            className="rounded-lg border border-line px-4 py-2 text-sm text-ink hover:bg-surface-2 disabled:opacity-50"
+          >
+            {enviandoReporte ? "Enviando…" : "Enviar reporte semanal"}
+          </button>
+          <Link href="/enviar" className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-page">
+            Nuevo correo
+          </Link>
+        </div>
       </div>
+      {avisoReporte && (
+        <p className={`-mt-4 text-sm ${avisoReporte.ok ? "text-success" : "text-danger"}`}>{avisoReporte.texto}</p>
+      )}
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Tarjeta titulo="Correos enviados" valor={String(totales.enviados)} />

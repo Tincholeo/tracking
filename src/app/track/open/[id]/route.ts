@@ -5,6 +5,7 @@ import { Resend } from "resend";
 import { getPool } from "@/lib/db";
 import { TRANSPARENT_PIXEL } from "@/lib/tracking";
 import { esAperturaSospechosa } from "@/lib/botDetection";
+import { escapeHtml } from "@/lib/html";
 
 async function notificarPrimeraAperturaReal(emailId: string) {
   const notifyTo = process.env.NOTIFY_EMAIL;
@@ -30,8 +31,8 @@ async function notificarPrimeraAperturaReal(emailId: string) {
   await resend.emails.send({
     from: process.env.RESEND_FROM_EMAIL!,
     to: notifyTo,
-    subject: `Tu correo "${email.asunto}" fue abierto`,
-    html: `<p>${email.destinatario} abrió el correo "${email.asunto}" recién.</p>`,
+    subject: `Tu correo "${email.asunto.trim()}" fue abierto`,
+    html: `<p>${escapeHtml(email.destinatario)} abrió el correo "${escapeHtml(email.asunto.trim())}" recién.</p>`,
   });
 }
 
