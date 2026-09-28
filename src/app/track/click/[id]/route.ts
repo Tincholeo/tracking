@@ -28,7 +28,7 @@ export async function GET(
 
   try {
     await pool.query(
-      "INSERT INTO clics (email_id, url_destino) VALUES (?, ?)",
+      "INSERT INTO clics (email_id, url_destino, click_at) VALUES (?, ?, UTC_TIMESTAMP())",
       [id, destino]
     );
   } catch {

@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
 
   if (campanaId) {
     await pool.query(
-      "INSERT INTO campanas (id, nombre, asunto) VALUES (?, ?, ?)",
+      "INSERT INTO campanas (id, nombre, asunto, creado_at) VALUES (?, ?, ?, UTC_TIMESTAMP())",
       [campanaId, asunto, asunto]
     );
   }
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     }
 
     await pool.query(
-      "INSERT INTO emails (id, destinatario, asunto, cuerpo, user_id, campana_id) VALUES (?, ?, ?, ?, ?, ?)",
+      "INSERT INTO emails (id, destinatario, asunto, cuerpo, user_id, campana_id, enviado_at) VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())",
       [emailId, destinatario, asunto, cuerpo, userId ?? "default", campanaId]
     );
     resultados.push({ destinatario, id: emailId });

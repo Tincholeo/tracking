@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
 
   const pool = getPool();
   const [result] = await pool.query(
-    "INSERT INTO plantillas (nombre, asunto, cuerpo) VALUES (?, ?, ?)",
+    "INSERT INTO plantillas (nombre, asunto, cuerpo, creado_at) VALUES (?, ?, ?, UTC_TIMESTAMP())",
     [nombre, asunto, cuerpo]
   );
 

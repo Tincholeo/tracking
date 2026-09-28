@@ -10,6 +10,8 @@ export function getPool() {
       user: process.env.DB_USER,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_NAME,
+      // Las fechas se guardan en UTC (UTC_TIMESTAMP()); el servidor MySQL está en otra zona.
+      timezone: "Z",
       waitForConnections: true,
       connectionLimit: 5,
     });

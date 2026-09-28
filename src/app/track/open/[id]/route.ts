@@ -47,14 +47,14 @@ export async function GET(
 
     // Se calcula en MySQL para no mezclar la zona horaria de la base con la de Vercel.
     const [emailRows] = await pool.query<(RowDataPacket & { seg: number })[]>(
-      "SELECT TIMESTAMPDIFF(SECOND, enviado_at, NOW()) AS seg FROM emails WHERE id = ? LIMIT 1",
+      "SELECT TIMESTAMPDIFF(SECOND, enviado_at, UTC_TIMESTAMP()) AS seg FROM emails WHERE id = ? LIMIT 1",
       [id]
     );
     const segundos = emailRows[0] ? Number(emailRows[0].seg) : null;
     const sospechosa = esAperturaSospechosa(userAgent, ip, segundos);
 
     await pool.query(
-      "INSERT INTO aperturas (email_id, ip, user_agent, sospechosa) VALUES (?, ?, ?, ?)",
+      "INSERT INTO aperturas (email_id, ip, user_agent, sospechosa, abierto_at) VALUES (?, ?, ?, ?, UTC_TIMESTAMP())",
       [id, ip, userAgent, sospechosa]
     );
 
