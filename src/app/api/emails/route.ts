@@ -5,7 +5,7 @@ export async function GET() {
   const pool = getPool();
 
   const [emails] = await pool.query(
-    `SELECT id, destinatario, asunto, enviado_at, creado_at, campana_id, estado, error_envio
+    `SELECT id, destinatario, asunto, enviado_at, creado_at, campana_id, estado, error_envio, seguimiento_de
      FROM emails ORDER BY COALESCE(enviado_at, creado_at) DESC LIMIT 500`
   );
   const [aperturas] = await pool.query(

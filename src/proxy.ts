@@ -29,6 +29,7 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // /api/cron/* se autentica con CRON_SECRET en el propio handler.
-  matcher: ["/((?!track/|api/cron/|_next/static|_next/image|favicon.ico).*)"],
+  // Públicas: tracking, baja y webhook de Resend (firma propia). /api/cron/*
+  // se autentica con CRON_SECRET en el propio handler.
+  matcher: ["/((?!track/|baja/|api/unsubscribe/|api/webhooks/|api/cron/|_next/static|_next/image|favicon.ico).*)"],
 };

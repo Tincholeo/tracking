@@ -28,8 +28,13 @@ export async function GET(
 
   try {
     await pool.query(
-      "INSERT INTO clics (email_id, url_destino, click_at) VALUES (?, ?, UTC_TIMESTAMP())",
-      [id, destino]
+      "INSERT INTO clics (email_id, url_destino, click_at, ip, user_agent) VALUES (?, ?, UTC_TIMESTAMP(), ?, ?)",
+      [
+        id,
+        destino,
+        (request.headers.get("x-forwarded-for") ?? "").slice(0, 64),
+        (request.headers.get("user-agent") ?? "").slice(0, 500),
+      ]
     );
   } catch {
     // no bloquear la redirección aunque falle el registro

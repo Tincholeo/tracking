@@ -34,6 +34,17 @@ export default function Enviar() {
   const [pickerAbierto, setPickerAbierto] = useState(false);
   const [previa, setPrevia] = useState<number | null>(null);
 
+  // null = automático: se incluye el enlace de baja en campañas, no en correos individuales.
+  const [bajaManual, setBajaManual] = useState<boolean | null>(null);
+  const [seguimientoActivo, setSeguimientoActivo] = useState(false);
+  const [segCondicion, setSegCondicion] = useState<"sin_apertura" | "sin_clic">("sin_apertura");
+  const [segDias, setSegDias] = useState(3);
+  const [segAsunto, setSegAsunto] = useState("");
+  const [segCuerpo, setSegCuerpo] = useState(
+    "<p>Hola {{primer_nombre|}},</p><p>Te escribo de nuevo por si no llegaste a ver mi correo anterior. Quedo atento a tu respuesta.</p>"
+  );
+  const [segKey, setSegKey] = useState(0);
+
   function cargarCola() {
     fetch("/api/queue")
       .then((r) => (r.ok ? r.json() : null))
@@ -131,7 +142,15 @@ export default function Enviar() {
     const res = await fetch("/api/send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ destinatarios, asunto, cuerpo }),
+      body: JSON.stringify({
+        destinatarios,
+        asunto,
+        cuerpo,
+        conBaja,
+        seguimiento: seguimientoActivo
+          ? { condicion: segCondicion, dias: segDias, asunto: segAsunto, cuerpo: segCuerpo }
+          : null,
+      }),
     });
     const data = await res.json().catch(() => ({}));
     setEnviando(false);
@@ -144,6 +163,8 @@ export default function Enviar() {
     const partes = [`${plural(data.enviadosAhora, "correo enviado", "correos enviados")} ahora`];
     if (data.pendientes > 0) partes.push(`${data.pendientes} en cola: salen solos los próximos días`);
     if (data.fallidos > 0) partes.push(`${data.fallidos} con error (ver historial)`);
+    if (data.omitidos?.length) partes.push(`${data.omitidos.length} omitidos por estar dados de baja o rebotar`);
+    if (seguimientoActivo) partes.push(`recordatorio programado a ${segDias} día(s)`);
     if (data.errorEnvio) partes.push(`Resend respondió: ${data.errorEnvio}`);
     setAviso({ texto: partes.join(" · "), tipo: data.errorEnvio || data.fallidos ? "info" : "ok" });
 
@@ -153,9 +174,18 @@ export default function Enviar() {
     setPlantillaSeleccionada("");
     setEditorKey((k) => k + 1);
     setPrevia(null);
+    setBajaManual(null);
+    setSeguimientoActivo(false);
+    setSegAsunto("");
+    setSegKey((k) => k + 1);
     cargarCola();
   }
 
+  const conBaja = bajaManual ?? validos.length > 1;
+  const inactivos = validos.filter((v) => {
+    const estado = porEmail.get(v.email)?.estado;
+    return estado && estado !== "activo";
+  });
   const saleHoy = cola ? Math.max(0, Math.min(validos.length, cola.disponibles - cola.pendientes)) : null;
   const personaliza = usaVariables(asunto) || usaVariables(cuerpo);
   const indicePrevia = previa !== null && previa < validos.length ? previa : null;
@@ -227,6 +257,11 @@ export default function Enviar() {
               </span>
             )}
           </div>
+          {inactivos.length > 0 && (
+            <p className="text-xs text-danger">
+              No se les va a enviar (dados de baja o rebotan): {inactivos.map((v) => v.email).join(", ")}
+            </p>
+          )}
           {invalidos.length > 0 && (
             <p className="text-xs text-danger">No son direcciones válidas: {invalidos.join(", ")}</p>
           )}
@@ -250,6 +285,56 @@ export default function Enviar() {
             Las variables como {"{{nombre}}"} se completan con los datos de cada contacto. Para un valor por defecto
             cuando falta el dato: {"{{nombre|equipo}}"}.
           </span>
+        </div>
+
+        <div className="flex flex-col gap-3 rounded-lg border border-line p-4">
+          <label className="flex items-start gap-2.5 text-sm text-ink">
+            <input type="checkbox" className="mt-0.5" checked={conBaja} onChange={(e) => setBajaManual(e.target.checked)} />
+            <span>
+              Incluir enlace para darse de baja
+              <span className="block text-xs text-muted">
+                Recomendado en campañas: protege tu dominio de ser marcado como spam. Quien se da de baja queda excluido de futuros envíos.
+              </span>
+            </span>
+          </label>
+
+          <label className="flex items-start gap-2.5 text-sm text-ink">
+            <input type="checkbox" className="mt-0.5" checked={seguimientoActivo} onChange={(e) => setSeguimientoActivo(e.target.checked)} />
+            <span>
+              Enviar un recordatorio automático
+              <span className="block text-xs text-muted">Solo a quien no cumpla la condición. Se revisa una vez por día (9:05, hora Argentina).</span>
+            </span>
+          </label>
+
+          {seguimientoActivo && (
+            <div className="ml-6 flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-2 text-sm text-ink-2">
+                Si
+                <select className="field w-auto py-1" value={segCondicion} onChange={(e) => setSegCondicion(e.target.value as "sin_apertura" | "sin_clic")}>
+                  <option value="sin_apertura">no lo abre</option>
+                  <option value="sin_clic">no hace clic en ningún enlace</option>
+                </select>
+                en
+                <input
+                  type="number"
+                  min={1}
+                  max={60}
+                  className="field w-20 py-1"
+                  value={segDias}
+                  onChange={(e) => setSegDias(Math.min(60, Math.max(1, Number(e.target.value) || 1)))}
+                />
+                día(s)
+              </div>
+              <label className="flex flex-col gap-1.5 text-sm text-ink-2">
+                Asunto del recordatorio
+                <input className="field" value={segAsunto} onChange={(e) => setSegAsunto(e.target.value)} placeholder="Vacío = «Re: » + asunto original" />
+              </label>
+              <div className="flex flex-col gap-1.5 text-sm text-ink-2">
+                Mensaje del recordatorio
+                <EmailEditor key={segKey} value={segCuerpo} onChange={setSegCuerpo} minHeight={120} />
+              </div>
+            </div>
+          )}
         </div>
 
         {validos.length > 0 && (asunto || cuerpo) && (

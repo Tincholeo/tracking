@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { formatFecha } from "@/lib/formato";
+import EmailDetail from "@/components/EmailDetail";
 
 type EmailRow = {
   id: string;
@@ -10,8 +11,9 @@ type EmailRow = {
   enviado_at: string | null;
   creado_at: string | null;
   campana_id: string | null;
-  estado: "pendiente" | "enviando" | "enviado" | "error";
+  estado: "pendiente" | "enviando" | "enviado" | "error" | "omitido" | "rebotado";
   error_envio: string | null;
+  seguimiento_de: string | null;
 };
 
 type Aggregate = { email_id: string; total: number };
@@ -38,6 +40,8 @@ function Insignia({ children, titulo, peligro }: { children: React.ReactNode; ti
 function CeldaEnvio({ email }: { email: EmailRow }) {
   if (email.estado === "enviado" && email.enviado_at) return <>{formatFecha(email.enviado_at)}</>;
   if (email.estado === "error") return <Insignia peligro titulo={email.error_envio ?? undefined}>Error al enviar</Insignia>;
+  if (email.estado === "rebotado") return <Insignia peligro titulo={email.error_envio ?? undefined}>Rebotó</Insignia>;
+  if (email.estado === "omitido") return <Insignia titulo={email.error_envio ?? undefined}>No enviado (baja)</Insignia>;
   return <Insignia titulo="Sale automáticamente cuando haya cupo diario">En cola</Insignia>;
 }
 
@@ -47,6 +51,7 @@ export default function Historial() {
   const [clics, setClics] = useState<Aggregate[]>([]);
   const [abiertas, setAbiertas] = useState<Set<string>>(new Set());
   const [busqueda, setBusqueda] = useState("");
+  const [detalle, setDetalle] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/emails")
@@ -130,8 +135,11 @@ export default function Historial() {
               if (fila.tipo === "individual") {
                 const e = fila.email;
                 return (
-                  <tr key={e.id} className="border-b border-line last:border-0">
-                    <td className={celda}>{e.destinatario}</td>
+                  <tr key={e.id} className="cursor-pointer border-b border-line last:border-0 hover:bg-surface-2/60" onClick={() => setDetalle(e.id)}>
+                    <td className={celda}>
+                      {e.destinatario}
+                      {e.seguimiento_de && <span className="ml-2"><Insignia>Recordatorio</Insignia></span>}
+                    </td>
                     <td className={`${celda} text-ink-2`}>{e.asunto}</td>
                     <td className={`${celda} text-ink-2`}><CeldaEnvio email={e} /></td>
                     <td className={`${celda} text-right`}><Contador valor={aperturasDe(e.id)} /></td>
@@ -145,7 +153,8 @@ export default function Historial() {
               const conClic = miembros.filter((e) => clicsDe(e.id) > 0).length;
               const enviados = miembros.filter((e) => e.estado === "enviado");
               const enCola = miembros.filter((e) => e.estado === "pendiente" || e.estado === "enviando").length;
-              const conError = miembros.filter((e) => e.estado === "error").length;
+              const conError = miembros.filter((e) => e.estado === "error" || e.estado === "rebotado").length;
+              const omitidos = miembros.filter((e) => e.estado === "omitido").length;
               const fechaCampana = enviados[enviados.length - 1]?.enviado_at ?? miembros[0].creado_at;
               const expandida = abiertas.has(campanaId);
 
@@ -154,14 +163,15 @@ export default function Historial() {
                   <tr className="cursor-pointer border-b border-line bg-surface-2/50 hover:bg-surface-2" onClick={() => toggle(campanaId)}>
                     <td className={celda}>
                       <span className="mr-2 inline-block w-3 text-muted">{expandida ? "▾" : "▸"}</span>
-                      Campaña · {miembros.length} destinatarios
+                      {miembros[0].seguimiento_de ? "Recordatorios" : "Campaña"} · {miembros.length} destinatarios
                     </td>
                     <td className={`${celda} text-ink-2`}>{miembros[0].asunto}</td>
                     <td className={`${celda} text-ink-2`}>
                       <div className="flex flex-wrap items-center gap-1.5">
                         {fechaCampana && formatFecha(fechaCampana)}
                         {enCola > 0 && <Insignia titulo="Salen automáticamente cuando haya cupo diario">{enCola} en cola</Insignia>}
-                        {conError > 0 && <Insignia peligro>{conError} con error</Insignia>}
+                        {conError > 0 && <Insignia peligro>{conError} con error o rebote</Insignia>}
+                        {omitidos > 0 && <Insignia titulo="Contactos dados de baja o que rebotan">{omitidos} omitidos</Insignia>}
                       </div>
                     </td>
                     <td className={`${celda} text-right`}>
@@ -173,7 +183,7 @@ export default function Historial() {
                   </tr>
                   {expandida &&
                     miembros.map((e) => (
-                      <tr key={e.id} className="border-b border-line">
+                      <tr key={e.id} className="cursor-pointer border-b border-line hover:bg-surface-2/60" onClick={() => setDetalle(e.id)}>
                         <td className={`${celda} pl-11 text-ink-2`}>{e.destinatario}</td>
                         <td className={`${celda} text-muted`}>{e.asunto}</td>
                         <td className={`${celda} text-muted`}><CeldaEnvio email={e} /></td>
@@ -188,8 +198,9 @@ export default function Historial() {
         </table>
       </div>
       <p className="text-xs text-muted">
-        En las campañas, la fila resumen muestra cuántos destinatarios abrieron o hicieron clic. Hacé clic en ella para ver el detalle.
+        Hacé clic en un correo para ver su actividad completa. En las campañas, la fila resumen muestra cuántos abrieron o hicieron clic; hacé clic en ella para ver cada destinatario.
       </p>
+      {detalle && <EmailDetail key={detalle} id={detalle} onCerrar={() => setDetalle(null)} onAbrir={setDetalle} />}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { Resend } from "resend";
 import { getPool } from "@/lib/db";
 import { injectTracking } from "@/lib/tracking";
+import { encabezadosBaja, pieBaja } from "@/lib/unsubscribe";
 
 // Resend cuenta el cupo por día calendario UTC (se reinicia a las 00:00 UTC).
 // La reserva deja lugar para los avisos de apertura y el reporte semanal,
@@ -39,6 +40,14 @@ export async function procesarCola() {
      WHERE estado = 'enviando' AND enviado_at < UTC_TIMESTAMP() - INTERVAL 15 MINUTE`
   );
 
+  // Alguien pudo darse de baja o rebotar mientras su correo esperaba en cola.
+  await pool.query(
+    `UPDATE emails e JOIN contactos c ON c.email = LOWER(e.destinatario)
+     SET e.estado = 'omitido',
+       e.error_envio = CONCAT('No se envió: el contacto está como ', c.estado)
+     WHERE e.estado = 'pendiente' AND c.estado <> 'activo'`
+  );
+
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL!;
   const resend = new Resend(process.env.RESEND_API_KEY);
   let enviados = 0;
@@ -61,7 +70,7 @@ export async function procesarCola() {
     if ((reclamo as { affectedRows: number }).affectedRows === 0) break;
 
     const [filas] = await pool.query<RowDataPacket[]>(
-      "SELECT id, destinatario, asunto, cuerpo FROM emails WHERE lote = ? ORDER BY creado_at, id",
+      "SELECT id, destinatario, asunto, cuerpo, con_baja FROM emails WHERE lote = ? ORDER BY creado_at, id",
       [lote]
     );
 
@@ -70,7 +79,9 @@ export async function procesarCola() {
         from: process.env.RESEND_FROM_EMAIL!,
         to: f.destinatario,
         subject: f.asunto,
-        html: injectTracking(f.cuerpo, f.id, baseUrl),
+        // El pie va después del tracking para que su enlace no se reescriba.
+        html: injectTracking(f.cuerpo, f.id, baseUrl) + (f.con_baja ? pieBaja(f.id, baseUrl) : ""),
+        ...(f.con_baja ? { headers: encabezadosBaja(f.id, baseUrl) } : {}),
       })),
       { batchValidation: "permissive" }
     );
@@ -85,6 +96,20 @@ export async function procesarCola() {
     }
 
     const errores = respuesta.data?.errors ?? [];
+
+    // En modo permisivo Resend devuelve los ids solo de los aceptados, en orden.
+    const indicesFallidos = new Set(errores.map((e) => e.index));
+    const aceptados = filas.filter((_, i) => !indicesFallidos.has(i));
+    const ids = respuesta.data?.data ?? [];
+    const pares = aceptados.map((f, i) => [f.id, ids[i]?.id]).filter(([, rid]) => rid);
+    if (pares.length > 0) {
+      await pool.query(
+        `UPDATE emails SET resend_id = CASE id ${pares.map(() => "WHEN ? THEN ?").join(" ")} END
+         WHERE id IN (?)`,
+        [...pares.flat(), pares.map(([id]) => id)]
+      );
+    }
+
     for (const e of errores) {
       const fila = filas[e.index];
       if (!fila) continue;

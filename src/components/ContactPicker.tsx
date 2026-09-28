@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-export type ContactoResumen = { id: number; email: string; nombre: string; empresa: string };
+export type ContactoResumen = { id: number; email: string; nombre: string; empresa: string; estado: string };
 
 type Props = {
   contactos: ContactoResumen[];
@@ -18,6 +18,7 @@ export default function ContactPicker({ contactos, yaIncluidos, onAgregar, onCer
   const termino = busqueda.trim().toLowerCase();
   const visibles = contactos.filter(
     (c) =>
+      c.estado === "activo" &&
       !yaIncluidos.has(c.email) &&
       (!termino || `${c.email} ${c.nombre} ${c.empresa}`.toLowerCase().includes(termino))
   );

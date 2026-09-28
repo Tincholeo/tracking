@@ -14,7 +14,11 @@ type Contacto = {
   abiertos: number;
   clicados: number;
   ultimo_envio: string | null;
+  estado: "activo" | "baja" | "rebotado" | "queja";
+  estado_motivo: string | null;
 };
+
+const ESTADO_TEXTO = { baja: "Baja", rebotado: "Rebota", queja: "Spam" } as const;
 
 type Aviso = { texto: string; ok: boolean };
 
@@ -33,6 +37,7 @@ export default function Contactos() {
   const router = useRouter();
   const [contactos, setContactos] = useState<Contacto[] | null>(null);
   const [busqueda, setBusqueda] = useState("");
+  const [filtro, setFiltro] = useState<"todos" | "activos" | "inactivos">("todos");
   const [seleccion, setSeleccion] = useState<Set<number>>(new Set());
   const [aviso, setAviso] = useState<Aviso | null>(null);
 
@@ -56,9 +61,12 @@ export default function Contactos() {
   if (!contactos) return <p className="text-muted">Cargando…</p>;
 
   const termino = busqueda.trim().toLowerCase();
-  const visibles = termino
-    ? contactos.filter((c) => `${c.email} ${c.nombre} ${c.empresa}`.toLowerCase().includes(termino))
-    : contactos;
+  const visibles = contactos.filter(
+    (c) =>
+      (filtro === "todos" || (filtro === "activos") === (c.estado === "activo")) &&
+      (!termino || `${c.email} ${c.nombre} ${c.empresa}`.toLowerCase().includes(termino))
+  );
+  const inactivos = contactos.filter((c) => c.estado !== "activo").length;
   const todosMarcados = visibles.length > 0 && visibles.every((c) => seleccion.has(c.id));
   const idsSeleccion = [...seleccion];
 
@@ -148,6 +156,28 @@ export default function Contactos() {
     }
   }
 
+  async function cambiarEstado(estado: "activo" | "baja") {
+    const n = idsSeleccion.length;
+    const pregunta =
+      estado === "baja"
+        ? `¿Marcar ${n} contacto(s) como dados de baja? No se les va a enviar nada más y se cancela lo que tengan en cola.`
+        : `¿Reactivar ${n} contacto(s)? Volverán a recibir envíos. Hacelo solo si pidieron volver o fue un error.`;
+    if (!window.confirm(pregunta)) return;
+    const res = await fetch("/api/contacts/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: idsSeleccion, estado }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      setAviso({ texto: `${data.actualizados} contacto(s) actualizado(s).`, ok: true });
+      setSeleccion(new Set());
+      await cargar();
+    } else {
+      setAviso({ texto: `Error: ${data.error ?? res.statusText}`, ok: false });
+    }
+  }
+
   async function guardarEdicion() {
     if (!editando) return;
     const res = await fetch(`/api/contacts/${editando.id}`, {
@@ -222,6 +252,11 @@ export default function Contactos() {
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
         />
+        <select className="field w-auto" value={filtro} onChange={(e) => setFiltro(e.target.value as typeof filtro)} aria-label="Filtrar por estado">
+          <option value="todos">Todos</option>
+          <option value="activos">Activos</option>
+          <option value="inactivos">Baja, rebote o spam ({inactivos})</option>
+        </select>
         {seleccion.size > 0 && (
           <div className="flex flex-wrap items-center gap-2 rounded-lg bg-surface-2 px-3 py-1.5 text-sm">
             <span className="text-ink">{seleccion.size} seleccionado(s)</span>
@@ -236,6 +271,12 @@ export default function Contactos() {
               className="rounded-md px-2 py-1 text-ink hover:bg-surface"
             >
               Exportar
+            </button>
+            <button onClick={() => cambiarEstado("baja")} className="rounded-md px-2 py-1 text-ink hover:bg-surface">
+              Dar de baja
+            </button>
+            <button onClick={() => cambiarEstado("activo")} className="rounded-md px-2 py-1 text-ink hover:bg-surface">
+              Reactivar
             </button>
             <button onClick={eliminar} className="rounded-md px-2 py-1 text-danger hover:bg-surface">
               Eliminar
@@ -290,7 +331,14 @@ export default function Contactos() {
                     ) : (
                       c.nombre && <div className="text-ink">{c.nombre}</div>
                     )}
-                    <div className={c.nombre || enEdicion ? "text-muted" : "text-ink"}>{c.email}</div>
+                    <div className={c.nombre || enEdicion ? "text-muted" : "text-ink"}>
+                      {c.email}
+                      {c.estado !== "activo" && (
+                        <span title={c.estado_motivo ?? undefined} className="ml-2 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-danger">
+                          {ESTADO_TEXTO[c.estado]}
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className={`${celda} text-ink-2`}>
                     {enEdicion ? (
@@ -334,7 +382,7 @@ export default function Contactos() {
         </table>
       </div>
       <p className="text-xs text-muted">
-        Cada destinatario al que le enviás se agrega solo. El CSV para importar necesita una columna email (o correo); nombre y
+        Cada destinatario al que le enviás se agrega solo. A los contactos dados de baja, que rebotan o que marcaron spam no se les envía nada. El CSV para importar necesita una columna email (o correo); nombre y
         empresa son opcionales y se usan en las variables {"{{nombre}}"} y {"{{empresa}}"}.
       </p>
     </div>
