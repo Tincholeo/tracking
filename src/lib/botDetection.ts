@@ -1,22 +1,24 @@
-// Heurísticas para filtrar aperturas de pixel que no son un humano leyendo el
-// correo: escáneres de seguridad corporativos y proxies de imágenes de los
-// propios proveedores de correo, que cargan la imagen automáticamente.
+// "GoogleImageProxy" NO es un bot: es como Gmail carga las imágenes cuando un
+// humano abre el correo, así que cuenta como apertura real.
 
-const BOT_USER_AGENT = /googleimageproxy|google-imageproxy|mimecast|proofpoint|barracuda|symantec|mailscanner|bot|crawler|spider|scanner|slurp/i;
+// Escáner de seguridad de Gmail: user-agent falso de Edge 12 / Chrome 42.
+const GMAIL_SCANNER_UA = /Chrome\/42\.0\.2311\.135.*Edge\/12\.246/;
+// Rango de rastreadores de Google (el proxy de imágenes usa 66.102.x.x).
+const GOOGLE_CRAWLER_IP = /^66\.249\./;
 
-// Si el pixel se dispara casi en el mismo instante del envío, es prácticamente
-// imposible que sea un humano habiendo leído el correo.
-const UMBRAL_SEGUNDOS = 5;
+const SCANNER_UA = /mimecast|proofpoint|barracuda|symantec|mailscanner|bot|crawler|spider|scanner|slurp/i;
+
+// Un hit a los pocos segundos del envío casi nunca es un humano.
+const UMBRAL_SEGUNDOS = 10;
 
 export function esAperturaSospechosa(
   userAgent: string,
-  enviadoAt: Date,
-  abiertoAt: Date
+  ip: string,
+  segundosDesdeEnvio: number | null
 ): boolean {
-  if (BOT_USER_AGENT.test(userAgent)) return true;
-
-  const segundos = (abiertoAt.getTime() - enviadoAt.getTime()) / 1000;
-  if (segundos >= 0 && segundos < UMBRAL_SEGUNDOS) return true;
-
+  if (GMAIL_SCANNER_UA.test(userAgent)) return true;
+  if (GOOGLE_CRAWLER_IP.test(ip.split(",")[0].trim())) return true;
+  if (SCANNER_UA.test(userAgent)) return true;
+  if (segundosDesdeEnvio !== null && segundosDesdeEnvio < UMBRAL_SEGUNDOS) return true;
   return false;
 }
