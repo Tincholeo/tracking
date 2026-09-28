@@ -3,10 +3,10 @@ import { escapeHtml } from "@/lib/html";
 export type DatosContacto = { email: string; nombre: string; empresa: string };
 
 export const VARIABLES = [
-  { clave: "nombre", descripcion: "Nombre completo" },
-  { clave: "primer_nombre", descripcion: "Solo el primer nombre" },
-  { clave: "empresa", descripcion: "Empresa" },
-  { clave: "email", descripcion: "Correo del destinatario" },
+  { clave: "nombre", etiqueta: "Nombre", descripcion: "Nombre completo" },
+  { clave: "primer_nombre", etiqueta: "Primer nombre", descripcion: "Solo el primer nombre" },
+  { clave: "empresa", etiqueta: "Empresa", descripcion: "Empresa" },
+  { clave: "email", etiqueta: "Email", descripcion: "Correo del destinatario" },
 ] as const;
 
 const PATRON = /\{\{\s*(\w+)\s*(?:\|([^}]*))?\}\}/g;

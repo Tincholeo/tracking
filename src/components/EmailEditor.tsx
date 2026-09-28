@@ -153,26 +153,29 @@ export default function EmailEditor({ value, onChange, minHeight = 220 }: Props)
     <div className="overflow-hidden rounded-lg border border-line bg-surface focus-within:outline-2 focus-within:outline-series-1">
       <div className="flex flex-wrap items-center gap-1 border-b border-line bg-surface-2 px-2 py-1.5">
         {!modoHtml && editor && <BarraFormato editor={editor} />}
-        <select
-          aria-label="Insertar variable"
-          className="ml-auto rounded-md border border-line bg-surface px-2 py-1 text-sm text-ink-2"
-          value=""
-          onChange={(e) => e.target.value && insertarVariable(e.target.value)}
-        >
-          <option value="">+ Variable</option>
-          {VARIABLES.map((v) => (
-            <option key={v.clave} value={v.clave}>
-              {`{{${v.clave}}}`} · {v.descripcion}
-            </option>
-          ))}
-        </select>
         <button
           type="button"
           onClick={cambiarModo}
-          className="rounded-md px-2 py-1 text-sm text-ink-2 hover:bg-surface hover:text-ink"
+          className="ml-auto rounded-md px-2 py-1 text-sm text-ink-2 hover:bg-surface hover:text-ink"
         >
           {modoHtml ? "Editor visual" : "</> HTML"}
         </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-3 py-2">
+        <span className="mr-1 text-xs text-muted">Insertar:</span>
+        {VARIABLES.map((v) => (
+          <button
+            key={v.clave}
+            type="button"
+            title={`${v.descripcion} · se inserta {{${v.clave}}}`}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => insertarVariable(v.clave)}
+            className="rounded-full border border-line bg-surface-2 px-2.5 py-0.5 text-xs text-ink-2 hover:border-series-1 hover:text-ink"
+          >
+            + {v.etiqueta}
+          </button>
+        ))}
       </div>
 
       {modoHtml ? (
