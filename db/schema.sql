@@ -6,7 +6,8 @@ CREATE TABLE IF NOT EXISTS emails (
   asunto VARCHAR(500) NOT NULL,
   cuerpo LONGTEXT NOT NULL,
   enviado_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  user_id VARCHAR(255) NOT NULL
+  user_id VARCHAR(255) NOT NULL,
+  campana_id CHAR(36) NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS aperturas (
@@ -28,6 +29,16 @@ CREATE TABLE IF NOT EXISTS clics (
 
 CREATE INDEX idx_aperturas_email_id ON aperturas(email_id);
 CREATE INDEX idx_clics_email_id ON clics(email_id);
+
+CREATE TABLE IF NOT EXISTS campanas (
+  id CHAR(36) PRIMARY KEY,
+  nombre VARCHAR(255) NOT NULL,
+  asunto VARCHAR(500) NOT NULL,
+  creado_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Si la tabla emails ya existía antes de esta columna, ejecutar aparte:
+-- ALTER TABLE emails ADD COLUMN campana_id CHAR(36) NULL, ADD FOREIGN KEY (campana_id) REFERENCES campanas(id) ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS plantillas (
   id INT AUTO_INCREMENT PRIMARY KEY,
