@@ -17,8 +17,9 @@
   --success: #006300;
 }
 
+/* Oscuro por preferencia del sistema, salvo que se haya elegido "claro"... */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
     --page: #0d0d0d;
     --surface: #1a1a19;
@@ -34,6 +35,24 @@
     --danger: #e66767;
     --success: #0ca30c;
   }
+}
+
+/* ...o forzado con el selector de tema. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #262624;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --muted: #8f8d86;
+  --line: rgba(255, 255, 255, 0.1);
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --danger: #e66767;
+  --success: #0ca30c;
 }
 
 @theme inline {

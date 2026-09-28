@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const ICONOS = {
   dashboard: "M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z",
@@ -21,9 +22,12 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="shrink-0 border-b border-line bg-surface md:sticky md:top-0 md:h-screen md:w-56 md:border-b-0 md:border-r">
-      <div className="px-5 pt-5 pb-3 text-base font-semibold text-ink md:pb-6">
-        Email Tracker
+    <aside className="flex shrink-0 flex-col border-b border-line bg-surface md:sticky md:top-0 md:h-screen md:w-56 md:border-b-0 md:border-r">
+      <div className="flex items-center justify-between px-5 pt-5 pb-3 md:pb-6">
+        <span className="text-base font-semibold text-ink">Email Tracker</span>
+        <div className="md:hidden">
+          <ThemeToggle />
+        </div>
       </div>
       <nav className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:overflow-visible">
         {ITEMS.map((item) => {
@@ -48,6 +52,9 @@ export default function Sidebar() {
           );
         })}
       </nav>
+      <div className="mt-auto hidden px-4 pb-5 md:block">
+        <ThemeToggle />
+      </div>
     </aside>
   );
 }
