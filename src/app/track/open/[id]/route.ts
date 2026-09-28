@@ -4,19 +4,20 @@ import type { RowDataPacket } from "mysql2";
 import { Resend } from "resend";
 import { getPool } from "@/lib/db";
 import { TRANSPARENT_PIXEL } from "@/lib/tracking";
+import { esAperturaSospechosa } from "@/lib/botDetection";
 
-async function notificarPrimeraApertura(emailId: string) {
+async function notificarPrimeraAperturaReal(emailId: string) {
   const notifyTo = process.env.NOTIFY_EMAIL;
   if (!notifyTo) return;
 
   const pool = getPool();
 
   const [aperturaRows] = await pool.query<RowDataPacket[]>(
-    "SELECT COUNT(*) AS total FROM aperturas WHERE email_id = ?",
+    "SELECT COUNT(*) AS total FROM aperturas WHERE email_id = ? AND sospechosa = 0",
     [emailId]
   );
-  const totalAperturas = aperturaRows[0]?.total ?? 0;
-  if (totalAperturas !== 1) return; // solo avisar la primera vez
+  const totalAperturasReales = aperturaRows[0]?.total ?? 0;
+  if (totalAperturasReales !== 1) return; // solo avisar la primera vez confiable
 
   const [emailRows] = await pool.query<(RowDataPacket & {
     destinatario: string;
@@ -41,24 +42,35 @@ export async function GET(
   const { id } = await ctx.params;
   const ip = request.headers.get("x-forwarded-for") ?? "";
   const userAgent = request.headers.get("user-agent") ?? "";
+  const ahora = new Date();
 
   try {
     const pool = getPool();
-    await pool.query(
-      "INSERT INTO aperturas (email_id, ip, user_agent) VALUES (?, ?, ?)",
-      [id, ip, userAgent]
+
+    const [emailRows] = await pool.query<(RowDataPacket & { enviado_at: Date })[]>(
+      "SELECT enviado_at FROM emails WHERE id = ? LIMIT 1",
+      [id]
     );
+    const enviadoAt = emailRows[0]?.enviado_at ?? ahora;
+    const sospechosa = esAperturaSospechosa(userAgent, new Date(enviadoAt), ahora);
+
+    await pool.query(
+      "INSERT INTO aperturas (email_id, ip, user_agent, sospechosa) VALUES (?, ?, ?, ?)",
+      [id, ip, userAgent, sospechosa]
+    );
+
+    if (!sospechosa) {
+      after(async () => {
+        try {
+          await notificarPrimeraAperturaReal(id);
+        } catch {
+          // no romper nada si falla la notificación
+        }
+      });
+    }
   } catch {
     // no bloquear la entrega del pixel aunque falle el registro
   }
-
-  after(async () => {
-    try {
-      await notificarPrimeraApertura(id);
-    } catch {
-      // no romper nada si falla la notificación
-    }
-  });
 
   return new NextResponse(TRANSPARENT_PIXEL, {
     headers: {

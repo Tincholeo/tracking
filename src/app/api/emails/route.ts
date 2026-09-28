@@ -8,7 +8,7 @@ export async function GET() {
     "SELECT id, destinatario, asunto, enviado_at, campana_id FROM emails ORDER BY enviado_at DESC LIMIT 200"
   );
   const [aperturas] = await pool.query(
-    "SELECT email_id, COUNT(*) AS total, MIN(abierto_at) AS primera_apertura FROM aperturas GROUP BY email_id"
+    "SELECT email_id, COUNT(*) AS total, MIN(abierto_at) AS primera_apertura FROM aperturas WHERE sospechosa = 0 GROUP BY email_id"
   );
   const [clics] = await pool.query(
     "SELECT email_id, COUNT(*) AS total FROM clics GROUP BY email_id"
