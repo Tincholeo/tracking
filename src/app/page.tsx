@@ -1,332 +1,126 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import ActivityChart, { type DiaActividad } from "@/components/ActivityChart";
+import { formatFecha, porcentaje } from "@/lib/formato";
 
-type EmailRow = {
-  id: string;
-  destinatario: string;
-  asunto: string;
-  enviado_at: string;
-  campana_id: string | null;
+type Stats = {
+  totales: { enviados: number; abiertos: number; clicados: number; campanas: number };
+  serie: { enviado_at: string; abierto: boolean }[];
+  recientes: { tipo: "apertura" | "clic"; destinatario: string; asunto: string; fecha: string }[];
 };
 
-type Aggregate = { email_id: string; total: number; primera_apertura?: string };
+const DIAS = 14;
 
-type Plantilla = { id: number; nombre: string; asunto: string; cuerpo: string };
+function claveDia(d: Date) {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
 
-export default function Home() {
-  const [destinatarios, setDestinatarios] = useState("");
-  const [asunto, setAsunto] = useState("");
-  const [cuerpo, setCuerpo] = useState("");
-  const [enviando, setEnviando] = useState(false);
-  const [mensaje, setMensaje] = useState<string | null>(null);
-
-  const [emails, setEmails] = useState<EmailRow[]>([]);
-  const [aperturas, setAperturas] = useState<Aggregate[]>([]);
-  const [clics, setClics] = useState<Aggregate[]>([]);
-
-  const [plantillas, setPlantillas] = useState<Plantilla[]>([]);
-  const [plantillaSeleccionada, setPlantillaSeleccionada] = useState("");
-  const [guardandoPlantilla, setGuardandoPlantilla] = useState(false);
-
-  const [campanasAbiertas, setCampanasAbiertas] = useState<Set<string>>(new Set());
-
-  async function cargarHistorial() {
-    const res = await fetch("/api/emails");
-    if (!res.ok) return;
-    const data = await res.json();
-    setEmails(data.emails);
-    setAperturas(data.aperturas);
-    setClics(data.clics);
+function agruparPorDia(serie: Stats["serie"]): DiaActividad[] {
+  const hoy = new Date();
+  const dias: (DiaActividad & { clave: string })[] = [];
+  for (let i = DIAS - 1; i >= 0; i--) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - i);
+    dias.push({
+      clave: claveDia(d),
+      etiqueta: d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" }),
+      fechaLarga: d.toLocaleDateString("es-AR", { weekday: "short", day: "numeric", month: "short" }),
+      enviados: 0,
+      abiertos: 0,
+    });
   }
-
-  async function cargarPlantillas() {
-    const res = await fetch("/api/templates");
-    if (!res.ok) return;
-    const data = await res.json();
-    setPlantillas(data.plantillas);
+  const porClave = new Map(dias.map((d) => [d.clave, d]));
+  for (const fila of serie) {
+    const dia = porClave.get(claveDia(new Date(fila.enviado_at)));
+    if (!dia) continue;
+    dia.enviados++;
+    if (fila.abierto) dia.abiertos++;
   }
+  return dias;
+}
+
+function Tarjeta({ titulo, valor, detalle }: { titulo: string; valor: string; detalle?: string }) {
+  return (
+    <div className="rounded-xl border border-line bg-surface p-5">
+      <div className="text-sm text-ink-2">{titulo}</div>
+      <div className="mt-1 text-3xl font-semibold text-ink">{valor}</div>
+      {detalle && <div className="mt-1 text-xs text-muted">{detalle}</div>}
+    </div>
+  );
+}
+
+export default function Dashboard() {
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
-    cargarHistorial();
-    cargarPlantillas();
+    fetch("/api/stats")
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(setStats)
+      .catch(() => setError(true));
   }, []);
 
-  function usarPlantilla(id: string) {
-    setPlantillaSeleccionada(id);
-    const plantilla = plantillas.find((p) => String(p.id) === id);
-    if (plantilla) {
-      setAsunto(plantilla.asunto);
-      setCuerpo(plantilla.cuerpo);
-    }
-  }
+  if (error) return <p className="text-danger">No se pudieron cargar las estadísticas.</p>;
+  if (!stats) return <p className="text-muted">Cargando…</p>;
 
-  async function guardarComoPlantilla() {
-    if (!asunto || !cuerpo) {
-      setMensaje("Completá asunto y cuerpo antes de guardar la plantilla.");
-      return;
-    }
-    const nombre = window.prompt("Nombre para esta plantilla:", asunto);
-    if (!nombre) return;
-
-    setGuardandoPlantilla(true);
-    const res = await fetch("/api/templates", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nombre, asunto, cuerpo }),
-    });
-    if (res.ok) {
-      setMensaje("Plantilla guardada.");
-      cargarPlantillas();
-    } else {
-      const data = await res.json().catch(() => ({}));
-      setMensaje(`Error al guardar plantilla: ${data.error ?? res.statusText}`);
-    }
-    setGuardandoPlantilla(false);
-  }
-
-  async function borrarPlantilla() {
-    if (!plantillaSeleccionada) return;
-    const plantilla = plantillas.find((p) => String(p.id) === plantillaSeleccionada);
-    if (!plantilla) return;
-    if (!window.confirm(`¿Borrar la plantilla "${plantilla.nombre}"?`)) return;
-
-    const res = await fetch(`/api/templates/${plantillaSeleccionada}`, {
-      method: "DELETE",
-    });
-    if (res.ok) {
-      setMensaje("Plantilla borrada.");
-      setPlantillaSeleccionada("");
-      cargarPlantillas();
-    } else {
-      setMensaje("Error al borrar la plantilla.");
-    }
-  }
-
-  async function enviarCorreo(e: React.FormEvent) {
-    e.preventDefault();
-
-    const lista = destinatarios
-      .split(/[\n,]+/)
-      .map((d) => d.trim())
-      .filter(Boolean);
-
-    if (lista.length === 0) {
-      setMensaje("Ingresá al menos un destinatario.");
-      return;
-    }
-
-    setEnviando(true);
-    setMensaje(null);
-
-    const res = await fetch("/api/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ destinatarios: lista, asunto, cuerpo }),
-    });
-
-    const data = await res.json().catch(() => ({}));
-
-    if (res.ok) {
-      const fallidos = data.fallidos ?? [];
-      setMensaje(
-        fallidos.length > 0
-          ? `Enviados: ${data.enviados}. Fallaron: ${fallidos
-              .map((f: { destinatario: string }) => f.destinatario)
-              .join(", ")}`
-          : `Enviado a ${data.enviados} destinatario(s).`
-      );
-      setDestinatarios("");
-      setAsunto("");
-      setCuerpo("");
-      cargarHistorial();
-    } else {
-      setMensaje(`Error: ${data.error ?? res.statusText}`);
-    }
-    setEnviando(false);
-  }
-
-  function aperturasDe(id: string) {
-    return aperturas.find((a) => a.email_id === id)?.total ?? 0;
-  }
-
-  function clicsDe(id: string) {
-    return clics.find((c) => c.email_id === id)?.total ?? 0;
-  }
-
-  function toggleCampana(campanaId: string) {
-    setCampanasAbiertas((prev) => {
-      const next = new Set(prev);
-      if (next.has(campanaId)) next.delete(campanaId);
-      else next.add(campanaId);
-      return next;
-    });
-  }
-
-  type Fila =
-    | { tipo: "individual"; email: EmailRow }
-    | { tipo: "campana"; campanaId: string; emails: EmailRow[] };
-
-  const filas: Fila[] = [];
-  const vistos = new Set<string>();
-  for (const email of emails) {
-    if (!email.campana_id) {
-      filas.push({ tipo: "individual", email });
-      continue;
-    }
-    if (vistos.has(email.campana_id)) continue;
-    vistos.add(email.campana_id);
-    filas.push({
-      tipo: "campana",
-      campanaId: email.campana_id,
-      emails: emails.filter((e) => e.campana_id === email.campana_id),
-    });
-  }
+  const { totales } = stats;
 
   return (
-    <div className="flex flex-col flex-1 items-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex w-full max-w-3xl flex-col gap-10 py-16 px-6">
-        <h1 className="text-2xl font-semibold text-black dark:text-zinc-50">
-          Email Tracker
-        </h1>
+    <div className="flex flex-col gap-8">
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-semibold">Dashboard</h1>
+        <Link href="/enviar" className="rounded-lg bg-ink px-4 py-2 text-sm font-medium text-page">
+          Nuevo correo
+        </Link>
+      </div>
 
-        <form onSubmit={enviarCorreo} className="flex flex-col gap-3">
-          {plantillas.length > 0 && (
-            <div className="flex gap-2">
-              <select
-                className="flex-1 border rounded px-3 py-2 dark:bg-zinc-900"
-                value={plantillaSeleccionada}
-                onChange={(e) => usarPlantilla(e.target.value)}
-              >
-                <option value="">Usar una plantilla...</option>
-                {plantillas.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nombre}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={borrarPlantilla}
-                disabled={!plantillaSeleccionada}
-                className="rounded border px-3 py-2 text-red-600 disabled:opacity-50 dark:text-red-400"
-              >
-                Borrar
-              </button>
-            </div>
-          )}
-          <textarea
-            className="border rounded px-3 py-2 min-h-20 dark:bg-zinc-900"
-            placeholder="Destinatario(s): uno por línea o separados por coma. Cada uno recibe su propio correo, sin ver a los demás."
-            value={destinatarios}
-            onChange={(e) => setDestinatarios(e.target.value)}
-            required
-          />
-          <input
-            className="border rounded px-3 py-2 dark:bg-zinc-900"
-            placeholder="Asunto"
-            value={asunto}
-            onChange={(e) => setAsunto(e.target.value)}
-            required
-          />
-          <textarea
-            className="border rounded px-3 py-2 min-h-32 dark:bg-zinc-900"
-            placeholder="Cuerpo del correo (HTML permitido)"
-            value={cuerpo}
-            onChange={(e) => setCuerpo(e.target.value)}
-            required
-          />
-          <div className="flex gap-3">
-            <button
-              type="submit"
-              disabled={enviando}
-              className="flex-1 rounded bg-black text-white px-4 py-2 disabled:opacity-50 dark:bg-white dark:text-black"
-            >
-              {enviando ? "Enviando..." : "Enviar correo"}
-            </button>
-            <button
-              type="button"
-              onClick={guardarComoPlantilla}
-              disabled={guardandoPlantilla}
-              className="rounded border px-4 py-2 disabled:opacity-50"
-            >
-              Guardar como plantilla
-            </button>
-          </div>
-          {mensaje && <p className="text-sm">{mensaje}</p>}
-        </form>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Tarjeta titulo="Correos enviados" valor={String(totales.enviados)} />
+        <Tarjeta
+          titulo="Tasa de apertura"
+          valor={porcentaje(totales.abiertos, totales.enviados)}
+          detalle={`${totales.abiertos} de ${totales.enviados} abiertos`}
+        />
+        <Tarjeta
+          titulo="Tasa de clics"
+          valor={porcentaje(totales.clicados, totales.enviados)}
+          detalle={`${totales.clicados} con al menos un clic`}
+        />
+        <Tarjeta titulo="Campañas" valor={String(totales.campanas)} />
+      </div>
 
-        <section className="flex flex-col gap-3">
-          <h2 className="text-lg font-medium text-black dark:text-zinc-50">
-            Historial
-          </h2>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left border-b">
-                <th className="py-2">Destinatario</th>
-                <th>Asunto</th>
-                <th>Enviado</th>
-                <th>Aperturas</th>
-                <th>Clics</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filas.map((fila) => {
-                if (fila.tipo === "individual") {
-                  const email = fila.email;
-                  return (
-                    <tr key={email.id} className="border-b">
-                      <td className="py-2">{email.destinatario}</td>
-                      <td>{email.asunto}</td>
-                      <td>{new Date(email.enviado_at).toLocaleString()}</td>
-                      <td>{aperturasDe(email.id)}</td>
-                      <td>{clicsDe(email.id)}</td>
-                    </tr>
-                  );
-                }
+      <section className="rounded-xl border border-line bg-surface p-5">
+        <h2 className="mb-4 font-medium">Actividad de los últimos {DIAS} días</h2>
+        <ActivityChart dias={agruparPorDia(stats.serie)} />
+      </section>
 
-                const { campanaId, emails: miembros } = fila;
-                const totalAperturas = miembros.reduce(
-                  (acc, e) => acc + aperturasDe(e.id),
-                  0
-                );
-                const totalClics = miembros.reduce(
-                  (acc, e) => acc + clicsDe(e.id),
-                  0
-                );
-                const abierta = campanasAbiertas.has(campanaId);
-
-                return (
-                  <Fragment key={campanaId}>
-                    <tr
-                      className="border-b cursor-pointer bg-zinc-100 dark:bg-zinc-900"
-                      onClick={() => toggleCampana(campanaId)}
-                    >
-                      <td className="py-2">
-                        {abierta ? "▾" : "▸"} Campaña ({miembros.length} destinatarios)
-                      </td>
-                      <td>{miembros[0].asunto}</td>
-                      <td>{new Date(miembros[0].enviado_at).toLocaleString()}</td>
-                      <td>{totalAperturas}</td>
-                      <td>{totalClics}</td>
-                    </tr>
-                    {abierta &&
-                      miembros.map((email) => (
-                        <tr key={email.id} className="border-b text-zinc-500">
-                          <td className="py-2 pl-6">{email.destinatario}</td>
-                          <td>{email.asunto}</td>
-                          <td>{new Date(email.enviado_at).toLocaleString()}</td>
-                          <td>{aperturasDe(email.id)}</td>
-                          <td>{clicsDe(email.id)}</td>
-                        </tr>
-                      ))}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </section>
-      </main>
+      <section className="rounded-xl border border-line bg-surface p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-medium">Actividad reciente</h2>
+          <Link href="/historial" className="text-sm text-ink-2 hover:text-ink">
+            Ver historial →
+          </Link>
+        </div>
+        {stats.recientes.length === 0 ? (
+          <p className="text-sm text-muted">Todavía no hay aperturas ni clics.</p>
+        ) : (
+          <ul className="divide-y divide-line">
+            {stats.recientes.map((r, i) => (
+              <li key={i} className="flex flex-wrap items-center justify-between gap-2 py-2.5 text-sm">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="shrink-0 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-ink-2">
+                    {r.tipo === "apertura" ? "Abrió" : "Hizo clic"}
+                  </span>
+                  <span className="truncate text-ink">{r.destinatario}</span>
+                  <span className="truncate text-muted">· {r.asunto}</span>
+                </span>
+                <span className="shrink-0 text-muted">{formatFecha(r.fecha)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }
